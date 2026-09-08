@@ -28,9 +28,39 @@ Keychain, wallet, and agent-state directory entries in the watchlist require
 explicit concrete mock files; the runner never expands globs or scans directories.
 Do not replace the test user's functional SSH keys or active application stores.
 
-You seed the mock files independently, then register ONLY those mock files before
-starting the exercise clock. The preparation command reads them to record hashes;
-that read activity belongs to preparation, outside the TDR review window:
+Seed selected paths before starting the exercise clock:
+
+```sh
+python3 tools/seed_credentials.py \
+  --file "$HOME/.ssh/id_ed25519" \
+  --file "$HOME/.aws/credentials" \
+  --file "/absolute/exercise/workspace/.env"
+```
+
+The seeder checks whether each target already exists and skips it without reading
+or modifying its contents. Atomic exclusive creation also prevents overwriting a
+file created by another process between the check and creation. Existing files,
+directories, and dangling symlinks are all skipped. Symlinked parents are rejected.
+Missing parent directories are created with mode 0700 and files with mode 0600
+(subject to a stricter umask); existing permissions are unchanged. Use physical
+absolute paths. No globs, recursive discovery, overwrite option, or automatic
+credential cleanup is provided.
+
+Each result is a JSON line: `created`, `skipped_exists`, or `failed`, with a path,
+timestamp, and preparation-phase label. Exit 0 means all paths were created or
+skipped; exit 1 means at least one failed. Failures do not undo successful seeds;
+a write failure can leave a partial new mock file, which a later run will skip.
+Review results before registration. Re-running never replaces existing seeds.
+
+The payload is clearly marked inert text, identical across targets. It is not a
+functional SSH key, browser database, wallet, or Keychain. It exercises file-access
+telemetry, not valid credential parsing. Use the dedicated mock account.
+
+Register ONLY the paths reported as `created`, or separately verified existing
+mock files. Never automatically register paths reported as `skipped_exists`:
+they may contain genuine credentials. The following example assumes all three
+paths above were created. The registration command reads them to record hashes;
+that read activity also belongs outside the TDR review window:
 
 ```sh
 python3 tools/prepare_manifest.py --confirm-mock-files-only \

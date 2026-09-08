@@ -1,5 +1,10 @@
 # Current revision: pre-seeded macOS mock files
 
+The separate seeding tool adds six tests covering missing-file creation and
+permissions, existing content/metadata preservation, directories and dangling
+symlinks, symlinked parents, a concurrent creator, and invalid paths. All 12 tests
+pass on the Linux development host. Seeding remains outside the skill workflow.
+
 Six unit tests passed on the Linux development host: unchanged pre-seeded files,
 missing files without creation, changed files excluded from staging/transfer,
 symlink rejection, mocked loopback transfer, and transfer failure reporting.

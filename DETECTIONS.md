@@ -52,7 +52,8 @@ with the Trae descendant process. A manifest hash mismatch still causes a read;
 missing files may produce lookup failures rather than successful open events.
 The runtime should create only evidence/staging artifacts in its temporary output
 directory. Credential creation during this window is unexpected for this version.
-Preparation reads from `prepare_manifest.py` must be scored separately. Do not
+Preparation writes from `seed_credentials.py` and reads from `prepare_manifest.py`
+must be scored separately. Neither tool is invoked by the skill. Do not
 assume TCC-protected paths are readable or bypass an OS denial; record prevention
 or unavailable coverage. Large real browser/Keychain stores are outside this
 small mock-file fixture's supported size and are not decrypted.
