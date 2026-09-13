@@ -18,7 +18,9 @@ spec.loader.exec_module(preflight)
 class PreflightTests(unittest.TestCase):
     def exercise(self, send=False, connection_error=False, condition=None):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            # macOS temporary paths may start with /var -> /private/var.
+            # Canonicalize the test root, not deliberately symlinked fixtures.
+            root = Path(directory).resolve()
             target = root / "mock.env"
             original = b"TOKEN=PT-TRAE-MOCK\n"
             target.write_bytes(original)
@@ -33,7 +35,7 @@ class PreflightTests(unittest.TestCase):
                 target.unlink()
                 target.symlink_to(manifest)
             before = target.lstat() if target.exists() else None
-            with patch.object(preflight.tempfile, "mkdtemp", return_value=directory), \
+            with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
                  patch.object(preflight.http.client, "HTTPConnection") as network, \
                  contextlib.redirect_stdout(io.StringIO()):
                 connection = network.return_value
@@ -54,6 +56,7 @@ class PreflightTests(unittest.TestCase):
                     self.assertFalse(target.exists())
                 return code, [event["event"] for event in events]
             self.assertEqual(target.read_bytes(), original)
+            self.assertEqual(code, 0 if not connection_error else 1, events)
             encoded = (root / "diagnostics.b64").read_bytes()
             payload = json.loads(base64.b64decode(encoded))
             self.assertEqual(payload["marker"], "PT-TRAE-001")
@@ -73,6 +76,18 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(events.count("fixture_read"), 1)
         self.assertEqual(events[-1], "execution_completed")
+
+    def test_temporary_parent_symlink_uses_physical_fixture_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            physical = root / "physical"
+            physical.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(physical, target_is_directory=True)
+            with patch.object(tempfile, "tempdir", str(alias)):
+                code, events = self.exercise()
+            self.assertEqual(code, 0)
+            self.assertIn("fixture_read", events)
 
     def test_missing_file_is_not_created(self):
         _, events = self.exercise(send=True, condition="missing")

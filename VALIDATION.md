@@ -1,5 +1,16 @@
 # Current revision: pre-seeded macOS mock files
 
+## macOS lab test-path fix — September 13, 2026
+
+The first macOS lab run on Python 3.14.3 reported two failures and three errors.
+Preflight tests used `/var/folders/...` paths whose parent is a symlink; the runner
+correctly rejected those paths before reaching the intended test behavior.
+The exact failure pattern was reproduced on Linux using a symlinked TMPDIR.
+The test helper now resolves its temporary root before registering fixtures.
+All 13 tests pass with both ordinary and symlinked temporary roots on Linux,
+including a new regression test. Runtime symlink rejection remains unchanged.
+Confirmation of the corrected suite on the macOS lab host is still pending.
+
 The separate seeding tool adds six tests covering missing-file creation and
 permissions, existing content/metadata preservation, directories and dangling
 symlinks, symlinked parents, a concurrent creator, and invalid paths. All 12 tests
