@@ -1,5 +1,9 @@
 # Trae malicious-skill purple-team fixture
 
+For a packaged macOS setup with separate operator phases, start with
+[OPERATOR.md](OPERATOR.md). There is no automatic test launcher: preparation,
+HTTP receiving, capture, verification and cleanup remain independent.
+
 This package models malicious skill behavior using synthetic data. Start with
 `RESEARCH.md` for the sourced landscape and `DETECTIONS.md` for evaluation.
 Nothing has been installed into Trae by creating these files.

@@ -1,5 +1,20 @@
 # Current revision: pre-seeded macOS mock files
 
+## Independent macOS operator package — September 13, 2026
+
+The operator package separates setup, HTTP receiving, packet capture, artifact
+verification and explicit cleanup. The operator CLI never invokes the payload.
+Its tests cover setup ownership and phase isolation, changed-file cleanup,
+combined manifests, TCP segmentation/retransmission, real runner artifact
+verification and the empty-PCAP failure case. The packaged setup/cleanup launchers
+passed in an isolated macOS workspace. Receiver and capture startup/timeouts were
+checked independently without executing the payload. The packaged verifier also
+returned PASS against the saved 29-file, 7,828-byte transfer and 14-packet capture
+from run `e566aac6-6454-407b-9342-2f4385df667b`.
+
+Finder quarantine handling and managed-device execution controls have not been
+validated; the ZIP is unsigned. Operator verification does not validate EDR alerts.
+
 ## macOS lab test-path fix — September 13, 2026
 
 The first macOS lab run on Python 3.14.3 reported two failures and three errors.
