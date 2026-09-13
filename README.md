@@ -85,6 +85,38 @@ paths (on macOS, `/private/tmp/...` rather than `/tmp/...` when appropriate).
 
 ## Test cases
 
+For expanded coverage, `plans/macos-expanded.json` provides 32 candidate paths
+across three independent batches: developer (12), cloud/container (8), and
+browser/agent (12). Prepare them before the next review window:
+
+```sh
+python3 tools/prepare_batches.py \
+  --plan plans/macos-expanded.json \
+  --workspace /absolute/exercise/workspace \
+  --output /absolute/exercise/workspace/expanded-batches
+```
+
+The output directory must not already exist. Each batch manifest includes only
+files created by this invocation, with hashes of the known mock bytes. Existing
+files are neither read nor enrolled, even if they were seeded previously. Keep
+the original three-file manifest as a separate baseline. `seeding.jsonl` records
+every attempted target; `summary.json` gives counts and manifest names. A batch
+with no new files produces no runnable manifest. Failures are logged and give
+exit 1; successful files are retained. Review the summary before running a batch.
+
+Browser targets use dedicated `PurpleTeam`/`purple-team` profile directories;
+agent targets include explicitly named mock subdirectories. These exercise
+wildcard/path-family detection, not necessarily rules restricted to an active
+profile. All content is inert text. The plan does not seed active macOS Keychain
+stores, wallet databases, shell histories, or broad home directories. It is an
+explicit subset of the hotspot watchlist, not complete watchlist coverage.
+
+Invoke one manifest per fresh Trae session, using the same prompt and interpreter
+as the baseline but substituting the batch manifest path. Each transfer run needs
+a fresh one-request collector; start capture before invoking Trae. Do not run the
+seeding tools from the skill. These config-shaped mock files are for a dedicated
+lab account and may not be usable by their corresponding applications.
+
 Run each case in a fresh chat. Install only one variant of this skill at a time;
 the controls intentionally share its name and description. Replace the installed
 entrypoint with the corresponding variant when instructed, preserving a copy of

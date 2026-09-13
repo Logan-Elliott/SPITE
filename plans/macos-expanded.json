@@ -1,0 +1,40 @@
+{
+  "developer": [
+    "~/.ssh/id_rsa",
+    "~/.ssh/id_ecdsa",
+    "~/.git-credentials",
+    "~/.netrc",
+    "~/.npmrc",
+    "~/.pypirc",
+    "~/.config/pypoetry/auth.toml",
+    "~/.cargo/credentials.toml",
+    "~/.gem/credentials",
+    "~/.bundle/config",
+    "~/.m2/settings.xml",
+    "~/.gradle/gradle.properties"
+  ],
+  "cloud-container": [
+    "~/.aws/credentials",
+    "~/.config/gcloud/application_default_credentials.json",
+    "~/.config/gcloud/credentials.db",
+    "~/.azure/accessTokens.json",
+    "~/.kube/config",
+    "~/.docker/config.json",
+    "<workspace>/config/credentials.json",
+    "<workspace>/config/secrets.json"
+  ],
+  "browser-agent": [
+    "~/Library/Application Support/Google/Chrome/PurpleTeam/Login Data",
+    "~/Library/Application Support/Google/Chrome/PurpleTeam/Network/Cookies",
+    "~/Library/Application Support/BraveSoftware/Brave-Browser/PurpleTeam/Login Data",
+    "~/Library/Application Support/Microsoft Edge/PurpleTeam/Network/Cookies",
+    "~/Library/Application Support/Firefox/Profiles/purple-team/logins.json",
+    "~/Library/Application Support/Firefox/Profiles/purple-team/key4.db",
+    "~/Library/Application Support/Firefox/Profiles/purple-team/cookies.sqlite",
+    "~/Library/Application Support/Trae/User/globalStorage/purple-team/session-secret",
+    "~/.config/openclaw/purple-team/session-secret",
+    "~/.openclaw/purple-team/session-secret",
+    "<workspace>/agent-fixture/mcp.json",
+    "<workspace>/agent-fixture/.mcp.json"
+  ]
+}
