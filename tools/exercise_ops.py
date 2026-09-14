@@ -20,6 +20,15 @@ from prepare_batches import prepare
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills/trae-workspace-preflight"
+EXTERNAL_VALIDATION = ["Trae ancestry", "EDR file events", "EDR network telemetry", "detector alerts"]
+
+
+def evidence_profile(args):
+    # Preserve the original profile for existing callers and lab launchers.
+    profile = getattr(args, "evidence_profile", "pcap")
+    if profile not in ("endpoint", "pcap"):
+        raise ValueError("Evidence profile must be endpoint or pcap")
+    return profile
 
 
 def utc():
@@ -44,6 +53,7 @@ def ask_path(value, prompt):
 
 
 def setup(args):
+    profile = evidence_profile(args)
     if os.geteuid() == 0:
         raise ValueError("Run setup as the exercise macOS user, not with sudo")
     plan_path = Path(args.plan or ROOT / "plans/macos-expanded.json").expanduser()
@@ -56,6 +66,7 @@ def setup(args):
         raise ValueError("Workspace parent must exist and use its physical path")
     print("Workspace:", workspace)
     print("Interpreter:", sys.executable)
+    print("Evidence profile:", profile)
     print("Exact requested targets (existing entries will be skipped):")
     for batch, paths in plan.items():
         for raw in paths:
@@ -69,7 +80,7 @@ def setup(args):
     (workspace / "evidence").mkdir(mode=0o700)
     # Keep a setup identity even if a later step fails.
     dump(workspace / "preparation.json", dict(started_utc=utc(),user_uid=os.getuid(),
-         interpreter=sys.executable,plan=str(plan_path),phase="preparation"))
+         interpreter=sys.executable,plan=str(plan_path),phase="preparation",evidence_profile=profile))
     summary, failed = prepare(plan, workspace, workspace / "batches")
     destination = workspace / ".trae/skills/trae-workspace-preflight"
     destination.parent.mkdir(parents=True)
@@ -110,16 +121,25 @@ def setup(args):
         receipt=str(prefix)+".jsonl"
         pcap=str(prefix)+".pcap"
         commands.extend(["Manifest: "+str(manifest),
-            "Separate receiver terminal: "+shlex.join([str(ROOT/"macos/HTTP-Receiver.command"),"--output",receipt]),
-            "Separate capture terminal: "+shlex.join([str(ROOT/"macos/Packet-Capture.command"),"--output",pcap]),
-            "After Trae completes and capture is stopped: "+shlex.join([str(ROOT/"macos/Verify.command"),"--manifest",str(manifest),"--receipt",receipt,"--pcap",pcap,"--output",str(prefix)+"-verification.json"]),""])
+            "Separate receiver terminal: "+shlex.join([str(ROOT/"macos/HTTP-Receiver.command"),"--output",receipt])])
+        verification = [str(ROOT/"macos/Verify.command"),"--evidence-profile",profile,
+                        "--manifest",str(manifest),"--receipt",receipt,
+                        "--output",str(prefix)+"-verification.json"]
+        if profile == "pcap":
+            commands.append("Separate capture terminal: "+shlex.join([str(ROOT/"macos/Packet-Capture.command"),"--output",pcap]))
+            verification.extend(["--pcap",pcap])
+        when = "After Trae completes and capture is stopped: " if profile == "pcap" else "After Trae completes: "
+        commands.extend([when+shlex.join(verification),""])
     with (workspace / "TRAE-PROMPTS.txt").open("x") as stream:
         stream.write("\n\n".join(prompts) + "\n")
     with (workspace / "OPERATOR-COMMANDS.txt").open("x") as stream:
-        stream.write("These commands are independent; run each explicitly. Verification asks for the run directory.\n"
+        stream.write("Evidence profile: "+profile+"\n"
+                     + ("Endpoint PASS covers saved application/receiver evidence only. EDR/SIEM telemetry is external and not mechanically verified.\n"
+                        if profile == "endpoint" else "Lab PASS also requires the captured POST body and same-connection HTTP 204.\n")
+                     + "These commands are independent; run each explicitly. Verification asks for the run directory.\n"
                      "For repeated tests, choose NEW evidence filenames.\n\n"+"\n".join(commands))
     dump(workspace / "setup-result.json", dict(completed_utc=utc(),status="INCOMPLETE" if failed or not manifests else "READY",
-         batches=summary,trae_invoked=False,payload_executed=False))
+         batches=summary,trae_invoked=False,payload_executed=False,evidence_profile=profile))
     print(json.dumps(summary, indent=2))
     print("Workspace:", workspace)
     print("Prompts:", workspace / "TRAE-PROMPTS.txt")
@@ -241,15 +261,31 @@ def tcp_streams(raw):
 
 
 def verify(args):
+    profile = evidence_profile(args)
+    if profile == "endpoint" and getattr(args,"pcap",None):
+        raise ValueError("Endpoint profile does not use --pcap; choose --evidence-profile pcap to verify a capture")
     run = ask_path(args.run, "Run artifact directory printed by Trae: ")
     manifest_path = ask_path(args.manifest, "Manifest used by Trae: ")
     receipt_path = ask_path(args.receipt, "HTTP receipt log: ")
-    pcap_path = ask_path(args.pcap, "Stopped packet capture (.pcap): ")
+    pcap_path = ask_path(args.pcap, "Stopped packet capture (.pcap): ") if profile == "pcap" else None
     output = ask_path(args.output, "New verification report path: ")
     checks = {}
-    report = dict(verified_utc=utc(),status="INCOMPLETE",checks=checks)
+    report = dict(verified_utc=utc(),status="INCOMPLETE",checks=checks,
+                  evidence_profile=profile,status_scope=profile+" evidence profile only",
+                  pcap_collected=False,pcap_verified=False,
+                  external_telemetry_mechanically_verified=False,
+                  external_validation_required=list(EXTERNAL_VALIDATION))
+    report["scope_description"] = (
+        "Saved manifest, runner, staged bundle and HTTP receiver payload agreement only; "
+        "PCAP intentionally outside scope. EDR/SIEM evidence must be reviewed separately."
+        if profile == "endpoint" else
+        "Saved application/receiver evidence plus PCAP request and response validation; "
+        "EDR/SIEM evidence must be reviewed separately.")
+    application_checked = False
     try:
         manifest = json.loads(manifest_path.read_text())
+        validator = module_from(SKILL / "scripts/preflight.py","manifest_validation_only")
+        validator.validate_manifest(manifest)
         expected = {e["path"]: e["sha256"] for e in manifest["files"]}
         events = [json.loads(line) for line in (run / "events.jsonl").read_text().splitlines()]
         bundle = (run / "diagnostics.b64").read_bytes()
@@ -257,6 +293,7 @@ def verify(args):
         run_id = payload["run_id"]
         receipts = [e for e in map(json.loads,receipt_path.read_text().splitlines()) if e.get("event")=="collector_received" and e.get("run_id")==run_id]
         stage = [e for e in events if e["event"]=="bundle_staged"]
+        checks["exercise_marker_and_encoding"] = payload.get("marker")=="PT-TRAE-001" and payload.get("content_encoding")=="base64"
         checks["exact_manifest_paths"] = set(payload["synthetic_credentials"])==set(expected)
         checks["all_file_hashes_match"] = all(hashlib.sha256(base64.b64decode(payload["synthetic_credentials"].get(p,""),validate=True)).hexdigest()==h for p,h in expected.items())
         checks["receipt_matches_bundle"] = len(receipts)==1 and {k:v for k,v in receipts[0].items() if k!="event"}==payload
@@ -266,26 +303,35 @@ def verify(args):
         checks["staged_hash_and_size"] = len(stage)==1 and stage[0]["sha256"]==hashlib.sha256(bundle).hexdigest() and stage[0]["bytes"]==len(bundle)
         checks["completed_loopback"] = events[-1].get("mode")=="loopback" and any(e["event"]=="transfer_acknowledged" and e.get("status")==204 for e in events)
         application_passed = all(checks.values())
-        raw = pcap_path.read_bytes()
-        streams,packets = tcp_streams(raw)
-        matched = []
-        for (src,dst),stream in streams.items():
-            if dst != 8765 or b"\r\n\r\n" not in stream: continue
-            headers,body = stream.split(b"\r\n\r\n",1)
-            fields = dict(line.split(b":",1) for line in headers.split(b"\r\n")[1:] if b":" in line)
-            length = int(fields.get(b"Content-Length",b"0").strip())
-            if headers.startswith(b"POST /pt-trae HTTP/1.1\r\n") and length==len(bundle) and body[:length]==bundle:
-                matched.append((src,dst))
-        checks["pcap_exact_request_body"] = len(matched)==1
-        checks["pcap_response_204_same_connection"] = len(matched)==1 and streams.get(tuple(reversed(matched[0])),b"").startswith((b"HTTP/1.0 204 ",b"HTTP/1.1 204 "))
-        report.update(run_id=run_id,files=len(expected),body_bytes=len(bundle),packet_count=packets,
-                      start_utc=events[0]["timestamp"],pid=events[0]["pid"],ppid=events[0]["ppid"],pcap_sha256=hashlib.sha256(raw).hexdigest())
-        report["status"] = "PASS" if all(checks.values()) else ("INCOMPLETE" if packets==0 and application_passed else "FAIL")
+        application_checked = True
+        report.update(run_id=run_id,files=len(expected),body_bytes=len(bundle),
+                      start_utc=events[0]["timestamp"],pid=events[0]["pid"],ppid=events[0]["ppid"])
+        if profile == "endpoint":
+            report["status"] = "PASS" if application_passed else "FAIL"
+        else:
+            raw = pcap_path.read_bytes()
+            streams,packets = tcp_streams(raw)
+            report["pcap_collected"] = packets > 0
+            matched = []
+            for (src,dst),stream in streams.items():
+                if dst != 8765 or b"\r\n\r\n" not in stream: continue
+                headers,body = stream.split(b"\r\n\r\n",1)
+                fields = dict(line.split(b":",1) for line in headers.split(b"\r\n")[1:] if b":" in line)
+                length = int(fields.get(b"Content-Length",b"0").strip())
+                if headers.startswith(b"POST /pt-trae HTTP/1.1\r\n") and length==len(bundle) and body[:length]==bundle:
+                    matched.append((src,dst))
+            checks["pcap_exact_request_body"] = len(matched)==1
+            checks["pcap_response_204_same_connection"] = len(matched)==1 and streams.get(tuple(reversed(matched[0])),b"").startswith((b"HTTP/1.0 204 ",b"HTTP/1.1 204 "))
+            report.update(packet_count=packets,pcap_sha256=hashlib.sha256(raw).hexdigest(),
+                          pcap_verified=checks["pcap_exact_request_body"] and checks["pcap_response_204_same_connection"])
+            report["status"] = "PASS" if all(checks.values()) else ("INCOMPLETE" if packets==0 and application_passed else "FAIL")
     except (OSError,ValueError,KeyError,IndexError,TypeError) as exc:
         report["error"] = str(exc)
+        if profile == "endpoint" or (application_checked and not application_passed):
+            report["status"] = "FAIL"
     dump(output,report)
     print(json.dumps(report,indent=2))
-    print("Verification reads saved artifacts only. It does not prove endpoint alerting or Trae ancestry.")
+    print("Status applies only to the {} evidence profile. EDR/SIEM telemetry and Trae ancestry are not mechanically verified.".format(profile))
     return {"PASS":0,"FAIL":1,"INCOMPLETE":2}[report["status"]]
 
 
@@ -320,12 +366,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="phase",required=True)
     p=sub.add_parser("setup");p.add_argument("--workspace");p.add_argument("--plan");p.add_argument("--apply",action="store_true")
+    p.add_argument("--evidence-profile",choices=("endpoint","pcap"),default="pcap",
+                   help="endpoint: non-admin managed systems; pcap: lab capture (default)")
     for name in ("receiver","capture"):
         p=sub.add_parser(name);p.add_argument("--output");p.add_argument("--timeout",type=int,default=900)
     p=sub.add_parser("verify")
+    p.add_argument("--evidence-profile",choices=("endpoint","pcap"),default="pcap")
     for name in ("run","manifest","receipt","pcap","output"):p.add_argument("--"+name)
     p=sub.add_parser("cleanup");p.add_argument("--workspace");p.add_argument("--apply",action="store_true")
     args=parser.parse_args()
+    if args.phase=="verify" and args.evidence_profile=="endpoint" and args.pcap:
+        parser.error("--pcap is outside the endpoint profile; select --evidence-profile pcap")
     if hasattr(args,"timeout") and not 1<=args.timeout<=3600:parser.error("timeout must be 1–3600 seconds")
     return globals()[args.phase](args)
 
