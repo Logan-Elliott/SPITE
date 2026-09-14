@@ -1,5 +1,27 @@
 # Current revision: pre-seeded macOS mock files
 
+## Endpoint evidence profile
+
+Testing is confined to the repository
+and temporary synthetic test directories. No real Trae payload was invoked;
+existing runner unit tests use temporary mock files and mocked network connections.
+
+The complete suite passes 28 tests on the Linux development host. New regression
+coverage verifies endpoint setup emits no capture/sudo/tcpdump command, records its
+profile, still generates the receiver, and supplies an explicit no-PCAP Verify
+command. Endpoint verification passes with valid synthetic application evidence
+and no PCAP or PCAP prompt; missing artifacts, bad receipt run IDs, wrong hashes,
+wrong paths, invalid manifests and failed HTTP acknowledgements fail. Endpoint
+setup, receiver and verifier tests reject subprocess execution. Existing PCAP,
+ownership and cleanup tests remain passing, and explicit PCAP verification still
+requires packet evidence. Profile reports list external EDR/SIEM checks as not
+mechanically verified.
+
+The package is rebuilt with endpoint and lab operator instructions and checked for
+ZIP CRC integrity and agreement with every embedded PACKAGE-HASHES.json entry.
+Native execution on the specified managed macOS version, Trae discovery/tool
+permissions and external EDR/SIEM detections still require target-side validation.
+
 ## Independent macOS operator package — September 13, 2026
 
 The operator package separates setup, HTTP receiving, packet capture, artifact

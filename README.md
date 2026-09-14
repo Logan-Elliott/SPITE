@@ -4,6 +4,24 @@ For a packaged macOS setup with separate operator phases, start with
 [OPERATOR.md](OPERATOR.md). There is no automatic test launcher: preparation,
 HTTP receiving, capture, verification and cleanup remain independent.
 
+**For the non-admin managed exercise host, select `--evidence-profile endpoint`.**
+It generates receiver and saved-artifact verification commands without local
+capture, sudo, or tcpdump. EDR/SIEM supplies external process/network evidence;
+the verifier does not mechanically validate it. For lab packet validation use
+`--evidence-profile pcap` (the unchanged default), which still requires a PCAP.
+
+From the extracted package root, prepare a new workspace:
+
+```sh
+./macos/Setup.command --evidence-profile endpoint --workspace "$HOME/trae-exercise"
+```
+
+Review the target list and type `PREPARE`. Use the generated
+`OPERATOR-COMMANDS.txt` and `TRAE-PROMPTS.txt`; only the manually submitted Trae
+prompt runs the exercise. Verification PASS applies to the selected evidence
+profile, not to EDR alerts or independent network observation. See the
+[endpoint commands and profile comparison](OPERATOR.md#evidence-profiles).
+
 This package models malicious skill behavior using synthetic data. Start with
 `RESEARCH.md` for the sourced landscape and `DETECTIONS.md` for evaluation.
 Nothing has been installed into Trae by creating these files.

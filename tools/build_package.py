@@ -26,7 +26,23 @@ if __name__=="__main__":
             info.compress_type=zipfile.ZIP_DEFLATED
             archive.writestr(info,path.read_bytes())
         archive.writestr("malskill-macos/PACKAGE-HASHES.json",json.dumps(hashes,indent=2)+"\n")
+    # Verify the artifact operators will actually distribute, not only the inputs.
+    with zipfile.ZipFile(target,"r") as archive:
+        bad_member=archive.testzip()
+        if bad_member is not None:
+            raise RuntimeError("ZIP integrity failure: "+bad_member)
+        embedded=json.loads(archive.read("malskill-macos/PACKAGE-HASHES.json"))
+        expected_names={"malskill-macos/"+name for name in embedded}
+        expected_names.add("malskill-macos/PACKAGE-HASHES.json")
+        if set(archive.namelist())!=expected_names or len(archive.namelist())!=len(expected_names):
+            raise RuntimeError("Unexpected or duplicate package entries")
+        if embedded!=hashes:
+            raise RuntimeError("Embedded hash manifest differs from package inputs")
+        for name,expected in embedded.items():
+            if hashlib.sha256(archive.read("malskill-macos/"+name)).hexdigest()!=expected:
+                raise RuntimeError("Packaged file hash mismatch: "+name)
     digest=hashlib.sha256(target.read_bytes()).hexdigest()
     (output/"malskill-macos.zip.sha256").write_text(digest+"  malskill-macos.zip\n")
     print(target)
+    print("Verified ZIP integrity and {} embedded file hashes.".format(len(hashes)))
     print("SHA-256:",digest)
