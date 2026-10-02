@@ -185,4 +185,13 @@ bundle. Run real harvest only inside an authorized engagement.
 Run `python3 tools/release_check.py` before publishing. It runs the tests, checks
 the source files and launchers, and builds a reproducible ZIP in `dist/`.
 
+Tagged releases include a GitHub artifact attestation. After downloading a ZIP,
+verify both records:
+
+```sh
+sha256sum -c agent-skill-redteam-harness-0.2.0-macos.zip.sha256
+gh attestation verify agent-skill-redteam-harness-0.2.0-macos.zip \
+  --repo Logan-Elliott/malskill
+```
+
 Released under the [MIT License](LICENSE).

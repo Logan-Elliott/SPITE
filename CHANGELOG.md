@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+## 0.2.0 - 2026-10-02
+
 - Added an operator choice between synthetic files and real harvest:
   `asrt init --harvest real` selects existing files from the file list, records
   their hashes, and sends their contents in the bundle. Setup never creates,
@@ -16,6 +18,18 @@ All notable changes to this project are documented here.
 - Kept the localhost receiver test as the default; `https` and `wss` transfers
   verify certificates, follow no redirects, and send only the manifest-verified
   bundle.
+- Kept the standard synthetic test on credential-shaped macOS paths so endpoint
+  detections see the locations they are intended to monitor.
+- Moved authoritative cleanup state outside the agent workspace, added
+  incremental setup records, and listed every path before removal.
+- Added bundle-digest acknowledgements, offline verification, per-test-case
+  report states, and the `ARTIFACTS VERIFIED` result.
+- Matched the benign control to the normal file, manifest, metadata, and prompt
+  conditions.
+- Added self-contained installation, update and uninstall commands, `asrt
+  doctor`, and an engagement report template.
+- Added a tag-driven release workflow with pinned actions and GitHub artifact
+  attestations.
 
 ## 0.1.0 - 2026-10-02
 
