@@ -21,6 +21,9 @@ All notable changes to this project are documented here.
 - Listed both the modern `Network/Cookies` and the legacy profile-root `Cookies`
   paths for Chrome, Brave, and Edge so flatpak and older Chromium builds are
   collected on Fedora and other distributions.
+- Fixed `spite doctor` reporting the receiver port as busy when a recent
+  connection was still in `TIME-WAIT`; the probe now uses `SO_REUSEADDR`, the
+  same setting the receiver itself uses.
 
 ## 0.2.0 - 2026-10-02
 

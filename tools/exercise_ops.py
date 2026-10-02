@@ -210,6 +210,7 @@ def doctor(args):
     probe = None
     try:
         probe = socket.socket()
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         probe.bind(("127.0.0.1", 8765))
     except OSError as exc:
         add("localhost receiver port", False, str(exc))
