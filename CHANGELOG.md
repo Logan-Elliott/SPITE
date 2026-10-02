@@ -12,3 +12,4 @@ All notable changes to this project are documented here.
 - Added benign and answer-manipulation control variants.
 - Added chronological MITRE ATLAS and ATT&CK mapped test cases, distinct controls,
   and reproducible setup for every skill variant.
+- Simplified operator guidance into a linear workflow with plain prompt names.
