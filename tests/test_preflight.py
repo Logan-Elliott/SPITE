@@ -40,6 +40,8 @@ class PreflightTests(unittest.TestCase):
                  contextlib.redirect_stdout(io.StringIO()):
                 connection = network.return_value
                 connection.getresponse.return_value.status = 204
+                connection.getresponse.return_value.getheader.side_effect = lambda _name: hashlib.sha256(
+                    connection.request.call_args.kwargs["body"]).hexdigest()
                 if connection_error:
                     connection.request.side_effect = OSError("collector unavailable")
                 code = preflight.run(manifest, send)
@@ -163,6 +165,8 @@ class PreflightTests(unittest.TestCase):
              patch.object(preflight.http.client, "HTTPSConnection") as secure, \
              contextlib.redirect_stdout(io.StringIO()):
             network.return_value.getresponse.return_value.status = 204
+            network.return_value.getresponse.return_value.getheader.side_effect = lambda _name: hashlib.sha256(
+                network.return_value.request.call_args.kwargs["body"]).hexdigest()
             code = preflight.run(manifest, send_to=url)
         self.assertEqual(code, 0)
         network.assert_called_once_with("collector.example.test", 9000, timeout=5)
@@ -186,24 +190,43 @@ class PreflightTests(unittest.TestCase):
              patch.object(preflight.http.client, "HTTPSConnection") as secure, \
              contextlib.redirect_stdout(io.StringIO()):
             secure.return_value.getresponse.return_value.status = 204
+            secure.return_value.getresponse.return_value.getheader.side_effect = lambda _name: hashlib.sha256(
+                secure.return_value.request.call_args.kwargs["body"]).hexdigest()
             code = preflight.run(manifest, send_to="https://collector.example.test/report")
         self.assertEqual(code, 0)
         secure.assert_called_once_with("collector.example.test", 443, timeout=5)
         self.assertEqual(secure.call_args.kwargs, {"timeout": 5})
         network.assert_not_called()
 
-    def websocket_socket(self, status_line=b"HTTP/1.1 101 Switching Protocols\r\n"):
+    def websocket_socket(self, root, status_line=b"HTTP/1.1 101 Switching Protocols\r\n"):
         socket_mock = MagicMock()
-        reply = status_line + b"Upgrade: websocket\r\n\r\n"
-        socket_mock.recv.side_effect = [reply[i:i + 1] for i in range(len(reply))]
+        key = base64.b64encode(b"\x01" * 16).decode("ascii")
+        accept = base64.b64encode(hashlib.sha1(
+            (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
+        ).digest())
+        reply = (status_line + b"Upgrade: websocket\r\nConnection: Upgrade\r\n"
+                 b"Sec-WebSocket-Accept: " + accept + b"\r\n\r\n")
+        queued = bytearray(reply)
+
+        def receive(length):
+            if not queued:
+                digest = hashlib.sha256((root / "diagnostics.b64").read_bytes()).hexdigest()
+                payload = json.dumps({"marker": "ASRT-001", "sha256": digest}).encode()
+                queued.extend(bytes((0x81, len(payload))) + payload)
+            data = bytes(queued[:length])
+            del queued[:length]
+            return data
+
+        socket_mock.recv.side_effect = receive
         return socket_mock
 
     def test_send_to_websocket_upgrades_then_sends_one_masked_frame(self):
         root, manifest = self.remote_fixture()
-        socket_mock = self.websocket_socket()
+        socket_mock = self.websocket_socket(root)
         with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
              patch.object(preflight.http.client, "HTTPConnection") as network, \
              patch.object(preflight.socket, "create_connection", return_value=socket_mock) as dial, \
+             patch.object(preflight.os, "urandom", side_effect=lambda length: b"\x01" * length), \
              contextlib.redirect_stdout(io.StringIO()):
             code = preflight.run(manifest, send_to="ws://collector.example.test:9000/report")
         self.assertEqual(code, 0)
@@ -234,12 +257,13 @@ class PreflightTests(unittest.TestCase):
 
     def test_send_to_wss_wraps_socket_with_certificate_verification(self):
         root, manifest = self.remote_fixture()
-        socket_mock = self.websocket_socket()
+        socket_mock = self.websocket_socket(root)
         context = MagicMock()
-        context.wrap_socket.return_value = self.websocket_socket()
+        context.wrap_socket.return_value = self.websocket_socket(root)
         with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
              patch.object(preflight.socket, "create_connection", return_value=socket_mock), \
              patch.object(preflight.ssl, "create_default_context", return_value=context), \
+             patch.object(preflight.os, "urandom", side_effect=lambda length: b"\x01" * length), \
              contextlib.redirect_stdout(io.StringIO()):
             code = preflight.run(manifest, send_to="wss://collector.example.test/report")
         self.assertEqual(code, 0)
@@ -249,9 +273,10 @@ class PreflightTests(unittest.TestCase):
 
     def test_websocket_rejected_upgrade_fails_the_transfer(self):
         root, manifest = self.remote_fixture()
-        socket_mock = self.websocket_socket(b"HTTP/1.1 403 Forbidden\r\n")
+        socket_mock = self.websocket_socket(root, b"HTTP/1.1 403 Forbidden\r\n")
         with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
              patch.object(preflight.socket, "create_connection", return_value=socket_mock), \
+             patch.object(preflight.os, "urandom", side_effect=lambda length: b"\x01" * length), \
              contextlib.redirect_stdout(io.StringIO()):
             code = preflight.run(manifest, send_to="ws://collector.example.test/report")
         self.assertEqual(code, 1)

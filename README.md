@@ -42,11 +42,12 @@ Follow that runbook:
 1. Ask the agent to check workspace readiness without naming the skill.
 2. If the agent does not use the skill, start a new conversation and tell it to
    use the skill.
-3. Start the localhost receiver, wait for `READY`, and submit the localhost
+3. Verify the offline run with the generated `OFFLINE_RUN_FOLDER` command.
+4. Start the localhost receiver, wait for `READY`, and submit the localhost
    prompt in a new conversation.
-4. Replace `RUN_FOLDER` in the verification command with the folder reported by
+5. Replace `RUN_FOLDER` in the verification command with the folder reported by
    the agent.
-5. Save the transcript and run the cleanup command.
+6. Save the transcript and run the cleanup command.
 
 For scripts, provide the workspace and skip the confirmation:
 
@@ -88,11 +89,13 @@ asrt init --destination https://collector.example.test/report
 ```
 
 The runbook's third prompt then tells the agent to append `--send-to` with that
-URL instead of `--send-loopback`. Your receiver must reply `204` after the
-POST, or complete the WebSocket upgrade for `ws`/`wss` URLs. Verification
-checks the transfer acknowledgement against your destination; confirm the
-bundle arrived on the receiver itself. The destination option uses the
-endpoint checks and is not combined with `--pcap`.
+URL instead of `--send-loopback`. An HTTP receiver must reply `204` with an
+`X-ASRT-Receipt` header containing the lowercase SHA-256 of the request body. A
+WebSocket receiver must complete a valid upgrade and return an unmasked text or
+binary message containing `{"marker":"ASRT-001","sha256":"BODY_SHA256"}`
+after accepting the bundle. Verification checks that digest acknowledgement
+against the staged bundle. The destination option uses endpoint checks and is
+not combined with `--pcap`.
 
 ## Test another agent or a larger file list
 

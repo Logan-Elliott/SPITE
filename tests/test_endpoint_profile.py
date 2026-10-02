@@ -33,11 +33,11 @@ class EndpointProfileTests(unittest.TestCase):
         if destination:
             status = 101 if destination.startswith(("ws://","wss://")) else 204
             transfers = [dict(event="transfer_attempt",destination=destination),
-                         dict(event="transfer_acknowledged",status=status),
+                         dict(event="transfer_acknowledged",status=status,sha256=op.hashlib.sha256(body).hexdigest()),
                          dict(event="execution_completed",mode="remote")]
         else:
             transfers = [dict(event="transfer_attempt",destination="http://127.0.0.1:8765/asrt"),
-                         dict(event="transfer_acknowledged",status=204),
+                         dict(event="transfer_acknowledged",status=204,sha256=op.hashlib.sha256(body).hexdigest()),
                          dict(event="execution_completed",mode="loopback")]
         event_data = [
             dict(event="execution_started"),
@@ -53,7 +53,8 @@ class EndpointProfileTests(unittest.TestCase):
         manifest_path.write_text(json.dumps(manifest))
         receipt = self.root / "receipt.jsonl"
         receipt.write_text(json.dumps(dict(event="collector_received",**payload))+"\n")
-        args = argparse.Namespace(run=str(run),manifest=str(manifest_path),receipt=str(receipt),
+        args = argparse.Namespace(run=str(run),manifest=str(manifest_path),
+                                  receipt=None if destination else str(receipt),
                                   pcap=None,output=str(self.root / "report.json"),
                                   evidence_profile=profile,destination=destination)
         return args, body
@@ -70,7 +71,7 @@ class EndpointProfileTests(unittest.TestCase):
         args, _ = self.artifacts()
         status, report = self.verify_endpoint(args)
         self.assertEqual(status,0)
-        self.assertEqual(report["status"],"PASS")
+        self.assertEqual(report["status"],"VERIFIED")
         self.assertEqual(report["evidence_profile"],"endpoint")
         self.assertEqual(report["status_scope"],"endpoint checks only")
         self.assertFalse(report["pcap_collected"])
@@ -194,13 +195,52 @@ class EndpointProfileTests(unittest.TestCase):
         args,_=self.artifacts(destination="https://collector.example.test/report")
         status,report=self.verify_endpoint(args)
         self.assertEqual(status,0)
-        self.assertEqual(report["status"],"PASS")
+        self.assertEqual(report["status"],"VERIFIED")
         self.assertEqual(report["destination"],"https://collector.example.test/report")
         self.assertTrue(report["checks"]["transfer_destination_matches"])
         self.assertTrue(report["checks"]["completed_transfer"])
         self.assertNotIn("receipt_matches_bundle",report["checks"])
         self.assertNotIn("completed_loopback",report["checks"])
-        self.assertIn("Confirm the bundle on your receiver",report["scope_description"])
+        self.assertIn("receiver digest acknowledgement",report["scope_description"])
+
+    def test_offline_run_verifies_tc03_and_tc04_without_a_receipt(self):
+        args,_=self.artifacts()
+        log=Path(args.run)/"events.jsonl"
+        events=[json.loads(line) for line in log.read_text().splitlines()]
+        events=events[:-3]+[dict(events[-1],event="execution_completed",mode="offline")]
+        log.write_text("".join(json.dumps(e)+"\n" for e in events))
+        args.receipt=None
+        args.offline=True
+        status,report=self.verify_endpoint(args)
+        self.assertEqual(status,0)
+        self.assertEqual(report["status"],"VERIFIED")
+        self.assertEqual(report["evidence_profile"],"offline")
+        self.assertEqual(report["test_cases"]["TC-03"],"artifacts-verified")
+        self.assertEqual(report["test_cases"]["TC-04"],"artifacts-verified")
+        self.assertEqual(report["test_cases"]["TC-05"],"not-run")
+
+    def test_local_destination_still_requires_the_bundled_receiver_receipt(self):
+        destination="http://127.0.0.1:8765/asrt"
+        args,_=self.artifacts(destination=destination)
+        args.receipt=str(self.root/"receipt.jsonl")
+        status,report=self.verify_endpoint(args)
+        self.assertEqual(status,0)
+        self.assertTrue(report["checks"]["receipt_matches_bundle"])
+        Path(args.receipt).write_text("")
+        args.output=str(self.root/"missing-local-receipt.json")
+        status,report=self.verify_endpoint(args)
+        self.assertEqual(status,1)
+        self.assertFalse(report["checks"]["receipt_matches_bundle"])
+
+    def test_destination_acknowledgement_requires_the_bundle_digest(self):
+        args,_=self.artifacts(destination="https://collector.example.test/report")
+        log=Path(args.run)/"events.jsonl"
+        events=[json.loads(line) for line in log.read_text().splitlines()]
+        events[-2].pop("sha256")
+        log.write_text("".join(json.dumps(e)+"\n" for e in events))
+        status,report=self.verify_endpoint(args)
+        self.assertEqual(status,1)
+        self.assertFalse(report["checks"]["completed_transfer"])
 
     def test_destination_mismatch_fails_verification(self):
         args,_=self.artifacts(destination="https://collector.example.test/report")

@@ -138,7 +138,8 @@ class VerifyRealTests(unittest.TestCase):
                 dict(event="fixture_read", path=str(target)),
                 dict(event="bundle_staged", bytes=len(body), sha256=hashlib.sha256(body).hexdigest()),
                 dict(event="transfer_attempt", destination="http://127.0.0.1:8765/asrt"),
-                dict(event="transfer_acknowledged", status=204),
+                dict(event="transfer_acknowledged", status=204,
+                     sha256=op.hashlib.sha256(body).hexdigest()),
                 dict(event="execution_completed", mode="loopback"),
             ]
             (run / "events.jsonl").write_text("".join(
@@ -152,7 +153,7 @@ class VerifyRealTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.verify(args), 0)
             report = json.loads((root / "report.json").read_text())
-            self.assertEqual(report["status"], "PASS")
+            self.assertEqual(report["status"], "VERIFIED")
             self.assertEqual(report["source"], "real")
 
 

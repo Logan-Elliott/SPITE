@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One-request localhost receiver. Exits after a request or 60 seconds idle."""
 import base64
+import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 
@@ -12,7 +13,8 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             if self.path != "/asrt" or not 0 < length <= 4 * 1024 * 1024:
                 raise ValueError("Unexpected path or size")
-            payload = json.loads(base64.b64decode(self.rfile.read(length), validate=True))
+            body = self.rfile.read(length)
+            payload = json.loads(base64.b64decode(body, validate=True))
             if not isinstance(payload, dict) or payload.get("marker") != "ASRT-001":
                 raise ValueError("Unexpected marker")
         except (ValueError, OSError):
@@ -20,6 +22,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         print(json.dumps(dict(event="collector_received", **payload)), flush=True)
         self.send_response(204)
+        self.send_header("X-ASRT-Receipt", hashlib.sha256(body).hexdigest())
         self.end_headers()
 
     def log_message(self, *args):

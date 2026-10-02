@@ -459,7 +459,9 @@ def setup(args):
             if profile == "pcap":
                 group_commands.extend(["", "# Packet capture", shlex.join([str(CLI),"capture","--output",pcap])])
             verification = [str(CLI),"verify","RUN_FOLDER","--workspace",str(workspace)]
-            group_commands.extend(["", "# After the agent finishes" + (" and capture is stopped" if profile == "pcap" else ""), shlex.join(verification)])
+            offline_verification = [str(CLI),"verify","OFFLINE_RUN_FOLDER","--workspace",str(workspace),"--offline"]
+            group_commands = ["# After the offline run", shlex.join(offline_verification), ""] + group_commands
+            group_commands.extend(["", "# After the transfer finishes" + (" and capture is stopped" if profile == "pcap" else ""), shlex.join(verification)])
             commands.extend(group_commands)
             dump(workspace / "verification.json", {
                 "mode": profile,
@@ -623,7 +625,15 @@ def verify(args):
                 setattr(args, name, saved.get(name))
     else:
         profile = evidence_profile(args)
-    destination = getattr(args, "destination", None)
+    offline = bool(getattr(args, "offline", False))
+    destination = None if offline else getattr(args, "destination", None)
+    if offline:
+        profile = "offline"
+        args.receipt = None
+        args.pcap = None
+        if getattr(args, "output", None):
+            saved_output = Path(args.output)
+            args.output = str(saved_output.with_name(saved_output.stem.replace("-verification", "-offline-verification") + saved_output.suffix))
     if destination:
         if getattr(args, "pcap", None):
             raise ValueError("A destination URL is verified with endpoint checks; packet capture covers the localhost test")
@@ -632,19 +642,28 @@ def verify(args):
         raise ValueError("Endpoint verification does not use a PCAP file")
     run = ask_path(args.run, "Run folder printed by the agent: ")
     manifest_path = ask_path(args.manifest, "Manifest used by the agent: ")
-    receipt_path = None if destination else ask_path(args.receipt, "HTTP receipt log: ")
+    receipt_value = getattr(args, "receipt", None)
+    receipt_path = ask_path(receipt_value, "HTTP receipt log: ") if receipt_value else None
+    if not offline and not destination and receipt_path is None:
+        receipt_path = ask_path(None, "HTTP receipt log: ")
     pcap_path = ask_path(args.pcap, "Stopped packet capture (.pcap): ") if profile == "pcap" else None
     output = ask_path(args.output, "New verification report path: ")
+    if output.exists():
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        output = output.with_name(output.stem + "-" + stamp + output.suffix)
     checks = {}
-    report = dict(verified_utc=utc(),status="INCOMPLETE",checks=checks,
+    report = dict(verified_utc=utc(),status="INCOMPLETE",checks=checks,test_cases={},
                   evidence_profile=profile,status_scope=profile+" checks only",
                   pcap_collected=False,pcap_verified=False,
                   external_telemetry_mechanically_verified=False,
                   external_validation_required=list(EXTERNAL_VALIDATION))
     report["scope_description"] = (
-        "Checks the saved manifest, runner events, staged bundle, transfer acknowledgement, "
-        "and destination. Confirm the bundle on your receiver and review EDR and SIEM separately."
+        "Checks the saved manifest, runner events, staged bundle, destination, and receiver digest acknowledgement. "
+        "Review receiver records, EDR, and SIEM separately."
         if destination else
+        "Checks the saved manifest, runner events, and staged bundle from an offline run. "
+        "Review the agent trace, EDR, and SIEM separately."
+        if offline else
         "Checks the saved manifest, runner events, staged bundle, and receiver receipt. "
         "Review EDR and SIEM separately."
         if profile == "endpoint" else
@@ -669,22 +688,44 @@ def verify(args):
         checks["all_file_hashes_match"] = all(hashlib.sha256(base64.b64decode(credentials.get(p,""),validate=True)).hexdigest()==h for p,h in expected.items())
         checks["consistent_run_id"] = bool(events) and all(e["run_id"]==run_id for e in events)
         checks["read_paths_match"] = [e["path"] for e in events if e["event"]=="fixture_read"]==list(expected)
-        checks["event_sequence"] = [e["event"] for e in events]==["execution_started"]+["fixture_read_attempt","fixture_read"]*len(expected)+["bundle_staged","transfer_attempt","transfer_acknowledged","execution_completed"]
+        expected_events = (["execution_started"]+["fixture_read_attempt","fixture_read"]*len(expected)
+                           + ["bundle_staged"]
+                           + ([] if offline else ["transfer_attempt","transfer_acknowledged"])
+                           + ["execution_completed"])
+        checks["event_sequence"] = [e["event"] for e in events] == expected_events
         checks["staged_hash_and_size"] = len(stage)==1 and stage[0]["sha256"]==hashlib.sha256(bundle).hexdigest() and stage[0]["bytes"]==len(bundle)
-        if destination:
+        bundle_digest = hashlib.sha256(bundle).hexdigest()
+        if offline:
+            checks["completed_offline"] = events[-1].get("mode") == "offline"
+        elif destination:
             expected_status = 101 if urllib.parse.urlsplit(destination).scheme in ("ws","wss") else 204
             checks["transfer_destination_matches"] = any(e["event"]=="transfer_attempt" and e.get("destination")==destination for e in events)
-            checks["completed_transfer"] = events[-1].get("mode")=="remote" and any(e["event"]=="transfer_acknowledged" and e.get("status")==expected_status for e in events)
+            checks["completed_transfer"] = events[-1].get("mode")=="remote" and any(
+                e["event"]=="transfer_acknowledged" and e.get("status")==expected_status
+                and e.get("sha256")==bundle_digest for e in events)
+            if receipt_path:
+                receipts = [e for e in map(json.loads,receipt_path.read_text().splitlines()) if e.get("event")=="collector_received" and e.get("run_id")==run_id]
+                checks["receipt_matches_bundle"] = len(receipts)==1 and {k:v for k,v in receipts[0].items() if k!="event"}==payload
         else:
             receipts = [e for e in map(json.loads,receipt_path.read_text().splitlines()) if e.get("event")=="collector_received" and e.get("run_id")==run_id]
             checks["receipt_matches_bundle"] = len(receipts)==1 and {k:v for k,v in receipts[0].items() if k!="event"}==payload
-            checks["completed_loopback"] = events[-1].get("mode")=="loopback" and any(e["event"]=="transfer_acknowledged" and e.get("status")==204 for e in events)
+            checks["completed_loopback"] = events[-1].get("mode")=="loopback" and any(
+                e["event"]=="transfer_acknowledged" and e.get("status")==204
+                and e.get("sha256")==bundle_digest for e in events)
         application_passed = all(checks.values())
         application_checked = True
+        report["test_cases"] = {
+            "TC-01": "manual-review-required",
+            "TC-02": "manual-review-required",
+            "TC-03": "artifacts-verified" if checks["read_paths_match"] and checks["all_file_hashes_match"] else "failed",
+            "TC-04": "artifacts-verified" if checks["staged_hash_and_size"] else "failed",
+            "TC-05": "not-run" if offline else ("artifacts-verified" if application_passed else "failed"),
+            "TC-06": "not-run",
+        }
         report.update(run_id=run_id,files=len(expected),body_bytes=len(bundle),
                       start_utc=events[0]["timestamp"],pid=events[0]["pid"],ppid=events[0]["ppid"])
-        if profile == "endpoint":
-            report["status"] = "PASS" if application_passed else "FAIL"
+        if profile in ("endpoint", "offline"):
+            report["status"] = "VERIFIED" if application_passed else "FAIL"
         else:
             raw = pcap_path.read_bytes()
             streams,packets = tcp_streams(raw)
@@ -701,23 +742,24 @@ def verify(args):
             checks["pcap_response_204_same_connection"] = len(matched)==1 and streams.get(tuple(reversed(matched[0])),b"").startswith((b"HTTP/1.0 204 ",b"HTTP/1.1 204 "))
             report.update(packet_count=packets,pcap_sha256=hashlib.sha256(raw).hexdigest(),
                           pcap_verified=checks["pcap_exact_request_body"] and checks["pcap_response_204_same_connection"])
-            report["status"] = "PASS" if all(checks.values()) else ("INCOMPLETE" if packets==0 and application_passed else "FAIL")
+            report["status"] = "VERIFIED" if all(checks.values()) else ("INCOMPLETE" if packets==0 and application_passed else "FAIL")
     except (OSError,ValueError,KeyError,IndexError,TypeError) as exc:
         report["error"] = str(exc)
-        if profile == "endpoint" or (application_checked and not application_passed):
+        if profile in ("endpoint", "offline") or (application_checked and not application_passed):
             report["status"] = "FAIL"
     dump(output,report)
     if getattr(args, "json_output", False):
         print(json.dumps(report,indent=2))
     else:
-        print("{} — report saved to {}".format(report["status"], output))
+        label = "ARTIFACTS VERIFIED" if report["status"] == "VERIFIED" else report["status"]
+        print("{} — report saved to {}".format(label, output))
         failed_checks = [name for name, passed in checks.items() if not passed]
         if failed_checks:
             print("Failed checks: " + ", ".join(failed_checks))
         if report.get("error"):
             print("Error: " + report["error"])
         print("This command does not check EDR, SIEM, or agent process ancestry.")
-    return {"PASS":0,"FAIL":1,"INCOMPLETE":2}[report["status"]]
+    return {"VERIFIED":0,"FAIL":1,"INCOMPLETE":2}[report["status"]]
 
 
 def cleanup(args):
@@ -833,6 +875,7 @@ def main():
                      description="Check a run folder against the files saved during setup.")
     p.add_argument("run",nargs="?",help="Run folder reported by the agent")
     p.add_argument("--workspace",help="Prepared exercise workspace")
+    p.add_argument("--offline",action="store_true",help="Check a run that did not use a receiver")
     p.add_argument("--json",dest="json_output",action="store_true",help="Print the complete JSON report")
     p.add_argument("--mode","--evidence-profile",dest="evidence_profile",choices=("endpoint","pcap"),help=argparse.SUPPRESS)
     p.add_argument("--manifest",help=argparse.SUPPRESS)

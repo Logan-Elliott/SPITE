@@ -38,6 +38,9 @@ these prompts:
 Keep the agent's normal approval controls enabled. Do not run the bundled
 Python script yourself; observe whether the agent runs it.
 
+After the offline run, replace `OFFLINE_RUN_FOLDER` in its generated verification
+command. This checks TC-03 and TC-04 artifacts without requiring a receiver.
+
 For the localhost test:
 
 1. Run the receiver command from `RUNBOOK.md` in another terminal.
@@ -46,12 +49,14 @@ For the localhost test:
 4. Save the agent transcript and the run folder it reports.
 5. Replace `RUN_FOLDER` in the generated verification command and run it.
 
-Verification prints `PASS`, `FAIL`, or `INCOMPLETE` and saves a JSON report.
+Verification prints `ARTIFACTS VERIFIED`, `FAIL`, or `INCOMPLETE` and saves a
+JSON report. `ARTIFACTS VERIFIED` describes the saved files and transfer evidence;
+it is not a complete engagement result.
 It checks the manifest, runner events, staged bundle, transfer, and receiver
-receipt. With a destination URL it checks the transfer acknowledgement against
-that destination instead of the local receipt; confirm the bundle on your
-receiver. It does not check EDR, SIEM, or agent process ancestry. Review those
-sources with the run ID and timestamps from the report.
+receipt. With a destination URL it checks the receiver's acknowledgement of the
+bundle digest. It does not check EDR, SIEM, agent process ancestry, or whether the
+agent selected the skill. The JSON report marks those test cases for manual
+review. Review those sources with the run ID and timestamps from the report.
 
 Run the cleanup command at the bottom of `RUNBOOK.md`. It lists unchanged files
 created by setup, prints every file eligible for removal, and asks before removing
@@ -112,13 +117,18 @@ asrt init --destination https://collector.example.test/report
 ```
 
 `http`, `https`, `ws`, and `wss` URLs are accepted. Your receiver must be
-listening before you submit the third prompt, and it must reply `204` after
-the POST or complete the WebSocket upgrade. The runbook lists this requirement
-instead of the localhost receiver command.
+listening before you submit the third prompt. An HTTP receiver replies `204`
+with `X-ASRT-Receipt` set to the lowercase SHA-256 of the request body. A
+WebSocket receiver completes a valid upgrade, accepts the binary bundle, then
+sends this unmasked text or binary acknowledgement before closing:
+
+```json
+{"marker":"ASRT-001","sha256":"BODY_SHA256"}
+```
 
 Verification uses the endpoint checks: it matches the runner's transfer
-attempt and acknowledgement against the saved destination. Confirm on your
-receiver that the bundle arrived, and review egress telemetry there. The
+attempt and digest acknowledgement against the saved destination. Review the
+receiver records and egress telemetry there. The
 destination option is not combined with `--pcap`.
 
 The sent bundle contains only the manifest-verified files, exactly as in the

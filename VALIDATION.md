@@ -16,7 +16,8 @@ The current suite covers:
 - target-config validation and custom project installation paths;
 - setup does not run the skill, and cleanup removes only unchanged files created
   by setup;
-- endpoint verification without packet capture;
+- offline and endpoint verification without packet capture;
+- receiver digest acknowledgement over HTTP and WebSocket;
 - PCAP verification, TCP segmentation, retransmission, and empty captures;
 - package construction and embedded file-hash verification.
 
@@ -58,5 +59,5 @@ The repository cannot establish the following without a real target run:
 - whether the expected detections alert for all completed test cases.
 
 Record those results per product version, model, operating system, permission mode,
-sensor configuration, and test case. A generated PASS report covers only the
+sensor configuration, and test case. An `ARTIFACTS VERIFIED` report covers only the
 files and network evidence checked by that command.

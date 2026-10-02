@@ -113,6 +113,8 @@ class OperatorTests(unittest.TestCase):
             with patch.object(runner.tempfile,"mkdtemp",return_value=str(run)), \
                  patch.object(runner.http.client,"HTTPConnection") as connection,contextlib.redirect_stdout(io.StringIO()):
                 connection.return_value.getresponse.return_value.status=204
+                connection.return_value.getresponse.return_value.getheader.side_effect = lambda _name: op.hashlib.sha256(
+                    connection.return_value.request.call_args.kwargs["body"]).hexdigest()
                 self.assertEqual(runner.run(manifest,True),0)
             body=(run/"diagnostics.b64").read_bytes()
             payload=json.loads(base64.b64decode(body))

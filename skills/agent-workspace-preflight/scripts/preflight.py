@@ -129,7 +129,10 @@ def send_http(parts, body):
         response = connection.getresponse()
         if response.status != 204:
             raise RuntimeError("Receiver returned HTTP status " + str(response.status))
-        return response.status
+        expected = hashlib.sha256(body).hexdigest()
+        if response.getheader("X-ASRT-Receipt") != expected:
+            raise RuntimeError("Receiver did not acknowledge the bundle digest")
+        return response.status, expected
     finally:
         connection.close()
 
@@ -154,7 +157,7 @@ def websocket_frame(opcode, payload):
     return header + mask + apply_mask(payload, mask)
 
 
-def read_websocket_status(connection):
+def read_websocket_handshake(connection, expected_accept):
     head = bytearray()
     while b"\r\n\r\n" not in head:
         chunk = connection.recv(1)
@@ -163,10 +166,47 @@ def read_websocket_status(connection):
         head += chunk
         if len(head) > 8192:
             raise ValueError("Oversized handshake response")
-    fields = head.split(b"\r\n", 1)[0].decode("ascii", "replace").split()
+    lines = head.decode("ascii", "replace").split("\r\n")
+    fields = lines[0].split()
     if len(fields) < 2 or not fields[1].isdigit():
         raise ValueError("Malformed handshake response")
-    return int(fields[1])
+    headers = {}
+    for line in lines[1:]:
+        if ":" in line:
+            name, value = line.split(":", 1)
+            headers[name.strip().lower()] = value.strip()
+    status = int(fields[1])
+    if (status != 101 or headers.get("upgrade", "").lower() != "websocket"
+            or "upgrade" not in headers.get("connection", "").lower()
+            or headers.get("sec-websocket-accept") != expected_accept):
+        raise RuntimeError("Receiver did not complete a valid WebSocket upgrade")
+    return status
+
+
+def receive_exact(connection, length):
+    data = bytearray()
+    while len(data) < length:
+        chunk = connection.recv(length - len(data))
+        if not chunk:
+            raise OSError("Receiver closed before acknowledging the bundle")
+        data.extend(chunk)
+    return bytes(data)
+
+
+def read_websocket_acknowledgement(connection, expected_digest):
+    first, second = receive_exact(connection, 2)
+    if (first & 0x0F) not in (0x1, 0x2) or not (first & 0x80) or (second & 0x80):
+        raise ValueError("Unexpected WebSocket acknowledgement frame")
+    length = second & 0x7F
+    if length == 126:
+        length = int.from_bytes(receive_exact(connection, 2), "big")
+    elif length == 127:
+        length = int.from_bytes(receive_exact(connection, 8), "big")
+    if length > 1024:
+        raise ValueError("Oversized WebSocket acknowledgement")
+    acknowledgement = json.loads(receive_exact(connection, length))
+    if acknowledgement != {"marker": MARKER, "sha256": expected_digest}:
+        raise RuntimeError("Receiver did not acknowledge the bundle digest")
 
 
 def send_websocket(parts, body):
@@ -180,22 +220,26 @@ def send_websocket(parts, body):
         authority = connect_host(parts)
         if parts["port"] != DEFAULT_PORTS[parts["scheme"]]:
             authority += ":" + str(parts["port"])
+        key = base64.b64encode(os.urandom(16)).decode("ascii")
+        expected_accept = base64.b64encode(hashlib.sha1(
+            (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
+        ).digest()).decode("ascii")
         request = "\r\n".join([
             "GET {} HTTP/1.1".format(parts["path"]),
             "Host: " + authority,
             "Upgrade: websocket",
             "Connection: Upgrade",
-            "Sec-WebSocket-Key: " + base64.b64encode(os.urandom(16)).decode("ascii"),
+            "Sec-WebSocket-Key: " + key,
             "Sec-WebSocket-Version: 13",
             "", "",
         ]).encode("ascii")
         connection.sendall(request)
-        status = read_websocket_status(connection)
-        if status != 101:
-            raise RuntimeError("Receiver returned HTTP status " + str(status))
+        status = read_websocket_handshake(connection, expected_accept)
         connection.sendall(websocket_frame(0x2, body))
+        digest = hashlib.sha256(body).hexdigest()
+        read_websocket_acknowledgement(connection, digest)
         connection.sendall(websocket_frame(0x8, b""))
-        return status
+        return status, digest
     finally:
         connection.close()
 
@@ -260,10 +304,10 @@ def run(manifest, send_loopback=False, send_to=None):
         emit("transfer_attempt", destination=destination)
         try:
             if parts["scheme"] in ("http", "https"):
-                status = send_http(parts, encoded)
+                status, receipt_digest = send_http(parts, encoded)
             else:
-                status = send_websocket(parts, encoded)
-            emit("transfer_acknowledged", status=status)
+                status, receipt_digest = send_websocket(parts, encoded)
+            emit("transfer_acknowledged", status=status, sha256=receipt_digest)
         except (OSError, ValueError, http.client.HTTPException, RuntimeError) as exc:
             emit("transfer_failed", error=str(exc))
             return 1
