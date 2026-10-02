@@ -60,7 +60,8 @@ class PreflightTests(unittest.TestCase):
             encoded = (root / "diagnostics.b64").read_bytes()
             payload = json.loads(base64.b64decode(encoded))
             self.assertEqual(payload["marker"], "ASRT-001")
-            self.assertEqual(base64.b64decode(payload["synthetic_credentials"][str(target)]), original)
+            self.assertEqual(payload["source"], "synthetic")
+            self.assertEqual(base64.b64decode(payload["credentials"][str(target)]), original)
             self.assertEqual(len({event["run_id"] for event in events}), 1)
             self.assertEqual(events[0]["run_id"], payload["run_id"])
             if send:

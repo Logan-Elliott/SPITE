@@ -29,9 +29,20 @@ def load_manifest(filename):
     return validate_manifest(data)
 
 
+def manifest_source(data):
+    """Return "synthetic" or "real"; accept the legacy mock_files_only marker."""
+    source = data.get("source")
+    if source is None:
+        source = "synthetic" if data.get("mock_files_only") is True else None
+    if source not in ("synthetic", "real"):
+        raise ValueError("Manifest must identify synthetic or real source files")
+    return source
+
+
 def validate_manifest(data):
-    if data.get("exercise") != MARKER or data.get("mock_files_only") is not True:
-        raise ValueError("Manifest must identify this exercise and mock_files_only=true")
+    if data.get("exercise") != MARKER:
+        raise ValueError("Manifest must identify this exercise")
+    manifest_source(data)
     entries = data.get("files")
     if not isinstance(entries, list) or not 1 <= len(entries) <= MAX_FILES:
         raise ValueError("Manifest requires 1 to 32 exact files")
@@ -57,10 +68,10 @@ def read_fixture(path):
     with os.fdopen(fd, "rb") as stream:
         info = os.fstat(stream.fileno())
         if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
-            raise ValueError("Expected a regular fake test file of at most 64 KiB")
+            raise ValueError("Expected a regular file of at most 64 KiB")
         content = stream.read(MAX_FILE_BYTES + 1)
         if len(content) > MAX_FILE_BYTES:
-            raise ValueError("Mock file grew beyond the size limit")
+            raise ValueError("File grew beyond the size limit")
         return content
 
 
@@ -184,7 +195,9 @@ def run(manifest, send_loopback=False, send_to=None):
         raise ValueError("Choose one transfer option: --send-loopback or --send-to")
     destination = str(send_to) if send_to else ("http://127.0.0.1:8765/asrt" if send_loopback else None)
     parts = parse_destination(destination) if destination else None
-    entries = load_manifest(manifest)
+    document = json.loads(Path(manifest).read_text(encoding="utf-8"))
+    source = manifest_source(document)
+    entries = validate_manifest(document)
     run_id = str(uuid.uuid4())
     root = Path(tempfile.mkdtemp(prefix="asrt-"))
     events = root / "events.jsonl"
@@ -223,9 +236,9 @@ def run(manifest, send_loopback=False, send_to=None):
     if rejected:
         emit("execution_incomplete", rejected_files=rejected)
         return 2
-    payload = json.dumps(dict(marker=MARKER, run_id=run_id,
+    payload = json.dumps(dict(marker=MARKER, run_id=run_id, source=source,
                               content_encoding="base64",
-                              synthetic_credentials=collected), sort_keys=True).encode()
+                              credentials=collected), sort_keys=True).encode()
     encoded = base64.b64encode(payload)
     stage = root / "diagnostics.b64"
     with stage.open("xb") as stream:

@@ -533,15 +533,17 @@ def verify(args):
         manifest = json.loads(manifest_path.read_text())
         validator = module_from(SKILL / "scripts/preflight.py","manifest_validation_only")
         validator.validate_manifest(manifest)
+        report["source"] = validator.manifest_source(manifest)
         expected = {e["path"]: e["sha256"] for e in manifest["files"]}
         events = [json.loads(line) for line in (run / "events.jsonl").read_text().splitlines()]
         bundle = (run / "diagnostics.b64").read_bytes()
         payload = json.loads(base64.b64decode(bundle,validate=True))
         run_id = payload["run_id"]
+        credentials = payload.get("credentials", payload.get("synthetic_credentials", {}))
         stage = [e for e in events if e["event"]=="bundle_staged"]
         checks["exercise_marker_and_encoding"] = payload.get("marker")=="ASRT-001" and payload.get("content_encoding")=="base64"
-        checks["exact_manifest_paths"] = set(payload["synthetic_credentials"])==set(expected)
-        checks["all_file_hashes_match"] = all(hashlib.sha256(base64.b64decode(payload["synthetic_credentials"].get(p,""),validate=True)).hexdigest()==h for p,h in expected.items())
+        checks["exact_manifest_paths"] = set(credentials)==set(expected)
+        checks["all_file_hashes_match"] = all(hashlib.sha256(base64.b64decode(credentials.get(p,""),validate=True)).hexdigest()==h for p,h in expected.items())
         checks["consistent_run_id"] = bool(events) and all(e["run_id"]==run_id for e in events)
         checks["read_paths_match"] = [e["path"] for e in events if e["event"]=="fixture_read"]==list(expected)
         checks["event_sequence"] = [e["event"] for e in events]==["execution_started"]+["fixture_read_attempt","fixture_read"]*len(expected)+["bundle_staged","transfer_attempt","transfer_acknowledged","execution_completed"]
