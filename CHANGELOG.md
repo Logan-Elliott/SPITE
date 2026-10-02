@@ -13,3 +13,5 @@ All notable changes to this project are documented here.
 - Added chronological MITRE ATLAS and ATT&CK mapped test cases, distinct controls,
   and reproducible setup for every skill variant.
 - Simplified operator guidance into a linear workflow with plain prompt names.
+- Replaced the setup command flow with guided defaults, a concise review, normal
+  confirmation, and a generated workspace runbook.

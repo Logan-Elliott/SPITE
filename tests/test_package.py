@@ -35,6 +35,7 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertIn("# Exercise workspace",runbook)
             self.assertIn("Loopback transfer",runbook)
             self.assertIn("HTTP-Receiver.command",runbook)
+            self.assertEqual(runbook.count("### Loopback transfer"),1)
 
     def test_custom_target_profile_controls_install_path_and_prompt(self):
         with tempfile.TemporaryDirectory() as directory:

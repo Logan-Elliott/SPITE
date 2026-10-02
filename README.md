@@ -13,40 +13,36 @@ does not collect existing credentials or send data off the endpoint.
 Requirements: macOS, Python 3.9+, a disposable project, and an agent that supports
 project-local `SKILL.md` packages.
 
-Prepare a workspace:
+Start the guided setup:
 
 ```sh
-./macos/Setup.command --evidence-profile endpoint \
-  --workspace "$HOME/agent-skill-exercise"
+./macos/Setup.command
 ```
 
-Review the displayed paths and type `PREPARE`. Setup creates the synthetic files,
-installs the skill, and writes:
+Press Enter to accept the recommended endpoint mode, main variant, and generated
+workspace path. Review the summary and answer `y` to continue. Setup installs the
+skill, prepares the synthetic files needed by that variant, and prints the path to:
 
-- `AGENT-PROMPTS.txt`: prompts to paste into the target agent.
-- `OPERATOR-COMMANDS.txt`: receiver and verification commands.
+- `RUNBOOK.md`: the prompts and exact commands for that workspace.
 
 For the complete behavior chain:
 
-1. Run the receiver command from `OPERATOR-COMMANDS.txt` in another terminal.
+1. Run the receiver command from `RUNBOOK.md` in another terminal.
 2. Wait for `READY`.
 3. Open the prepared workspace in the target agent.
 4. Start a fresh conversation and paste the **Loopback transfer** prompt.
-5. Run the generated verification command after the agent finishes.
+5. Run the verification command from the same runbook after the agent finishes.
 
 Use the **Implicit selection** prompt to test automatic skill selection without
 network activity. Use **Explicit invocation** when you need a deterministic
 offline run.
 
-When finished:
+The runbook also contains the cleanup commands. For an already reviewed,
+noninteractive setup:
 
 ```sh
-./macos/Cleanup.command --workspace "$HOME/agent-skill-exercise"
-./macos/Cleanup.command --workspace "$HOME/agent-skill-exercise" --apply
+./macos/Setup.command --workspace "$HOME/agent-skill-exercise" --yes
 ```
-
-The first command previews cleanup. The second removes only unchanged files that
-setup recorded as owned.
 
 See [OPERATOR.md](OPERATOR.md) for the complete runbook.
 
@@ -72,15 +68,14 @@ Prepare separate workspaces when you want the matched benign baseline or the
 output-manipulation case:
 
 ```sh
-./macos/Setup.command --evidence-profile endpoint --skill-variant benign-control \
-  --workspace "$HOME/asrt-benign"
+./macos/Setup.command --variant benign-control
 
-./macos/Setup.command --evidence-profile endpoint \
-  --skill-variant answer-contamination --workspace "$HOME/asrt-answer"
+./macos/Setup.command --variant answer-contamination
 ```
 
 The variants use the same skill name and description. Setup generates the correct
-prompt for the selected variant.
+prompt for the selected variant and does not seed mock files that the variant will
+never read.
 
 ## Use another target agent
 
@@ -88,9 +83,7 @@ Copy [profiles/custom-example.json](profiles/custom-example.json) and set the
 documented project-relative skill path for the target:
 
 ```sh
-./macos/Setup.command --evidence-profile endpoint \
-  --target-profile /absolute/path/to/target.json \
-  --workspace "$HOME/agent-skill-exercise"
+./macos/Setup.command --target /absolute/path/to/target.json
 ```
 
 The included [Trae profile](profiles/trae.json) is the reference configuration.
