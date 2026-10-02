@@ -18,6 +18,9 @@ All notable changes to this project are documented here.
 - Pointed the Trae browser-agent target at the real `state.vscdb` secret store
   and raised the real-harvest size limit to 8 MiB per file and 8 MiB total so
   browser and Trae credential stores are collected.
+- Listed both the modern `Network/Cookies` and the legacy profile-root `Cookies`
+  paths for Chrome, Brave, and Edge so flatpak and older Chromium builds are
+  collected on Fedora and other distributions.
 
 ## 0.2.0 - 2026-10-02
 

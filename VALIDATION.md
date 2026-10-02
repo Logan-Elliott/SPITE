@@ -55,6 +55,14 @@ This VM check used a real socket and host path. It did not run a coding agent,
 macOS packet capture, or endpoint detection product, so it does not replace the
 engagement checks below.
 
+A second check ran the same browser-agent group on a dedicated Fedora 44
+Workstation VM with Python 3.14.3. Setup discovered the flatpak Chromium profile
+at `~/.var/app/org.chromium.Chromium/config/chromium/Default/` and collected both
+`Login Data` and the legacy profile-root `Cookies`, discovered the Linux Trae
+store at `~/.config/Trae/User/globalStorage/state.vscdb`, and reported the Brave,
+Edge, Firefox, and openclaw entries as unresolved. The full suite passed on that
+VM and the staged bundle verified through the loopback receiver.
+
 ## macOS harness validation
 
 Setup, receiving, capture, verification, and cleanup have each been exercised on
