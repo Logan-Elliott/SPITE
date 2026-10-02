@@ -38,7 +38,9 @@ body during this review. Verify discovery and resource copying in the exact
 installed product/version before scoring a test.
 
 This tool tests prerequisite execution, fake credential-file reads, Base64
-staging, an optional localhost POST, and response manipulation. It does not run
+staging, an optional localhost POST or transfer to an operator-provided
+receiver, and response manipulation. It does not run
 infostealers, reverse shells, remote payloads, persistence, scanner evasion, or
 fraud, and it never reads real credentials. Rules for real browser-vault access
-or external network traffic will not fire during these localhost tests.
+will not fire during these tests; egress rules fire only when a destination is
+configured.

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## Unreleased
+
+- Added operator-configurable transfer destinations: `asrt init --destination`
+  accepts an `http`, `https`, `ws`, or `wss` URL, the generated prompt uses
+  `--send-to`, and verification checks the transfer acknowledgement against
+  the saved destination.
+- Kept the localhost receiver test as the default; `https` and `wss` transfers
+  verify certificates, follow no redirects, and send only the manifest-verified
+  fake-file bundle.
+
 ## 0.1.0 - 2026-10-02
 
 - Added target configuration files for project skill installation.

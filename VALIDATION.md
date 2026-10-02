@@ -10,7 +10,8 @@ The current suite covers:
 - creating fake files at exact paths without overwriting existing paths or
   following parent symlinks;
 - manifest validation, file limits, hashes, and changed-file rejection;
-- offline staging and fixed loopback transfer behavior;
+- offline staging, fixed loopback transfer behavior, and destination transfers
+  over http, https, ws, and wss;
 - target-config validation and custom project installation paths;
 - setup does not run the skill, and cleanup removes only unchanged files created
   by setup;

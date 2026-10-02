@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read fake files, create a Base64 bundle, and optionally POST it to loopback."""
+"""Read fake files, create a Base64 bundle, and optionally send it to a receiver."""
 import argparse
 import base64
 from datetime import datetime, timezone
@@ -8,14 +8,20 @@ import http.client
 import json
 import os
 import re
+import socket
+import ssl
 import stat
+import struct
 from pathlib import Path
 import tempfile
+import urllib.parse
 import uuid
 
 MARKER = "ASRT-001"
 MAX_FILE_BYTES = 65536
 MAX_FILES = 32
+DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443}
+WEBSOCKET_TIMEOUT = 5
 
 
 def load_manifest(filename):
@@ -58,7 +64,126 @@ def read_fixture(path):
         return content
 
 
-def run(manifest, send_loopback=False):
+def parse_destination(url):
+    """Validate an operator-provided receiver URL and split it into parts."""
+    if not isinstance(url, str) or not url or any(not 0x20 < ord(c) < 0x7F for c in url):
+        raise ValueError("Destination must be a printable http, https, ws, or wss URL")
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in DEFAULT_PORTS:
+        raise ValueError("Destination scheme must be http, https, ws, or wss")
+    if not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
+        raise ValueError("Destination needs a host without credentials or fragments")
+    try:
+        port = parsed.port
+    except ValueError:
+        raise ValueError("Destination port is not a valid number")
+    if port is None:
+        port = DEFAULT_PORTS[parsed.scheme]
+    if not 1 <= port <= 65535:
+        raise ValueError("Destination port must be between 1 and 65535")
+    path = parsed.path or "/"
+    if not path.startswith("/"):
+        raise ValueError("Destination path must start with /")
+    if parsed.query:
+        path += "?" + parsed.query
+    return {"scheme": parsed.scheme, "host": parsed.hostname, "port": port, "path": path}
+
+
+def connect_host(parts):
+    # http.client and the WebSocket handshake need bracketed IPv6 literals.
+    return "[" + parts["host"] + "]" if ":" in parts["host"] else parts["host"]
+
+
+def send_http(parts, body):
+    # One POST; no redirects, no proxy environment; https verifies certificates.
+    if parts["scheme"] == "https":
+        connection = http.client.HTTPSConnection(connect_host(parts), parts["port"], timeout=5)
+    else:
+        connection = http.client.HTTPConnection(connect_host(parts), parts["port"], timeout=5)
+    try:
+        connection.request("POST", parts["path"], body=body, headers={
+            "Content-Type": "application/octet-stream",
+            "X-Purple-Team": MARKER,
+        })
+        response = connection.getresponse()
+        if response.status != 204:
+            raise RuntimeError("Receiver returned HTTP status " + str(response.status))
+        return response.status
+    finally:
+        connection.close()
+
+
+def apply_mask(data, mask):
+    if not data:
+        return b""
+    repeated = (mask * ((len(data) + 3) // 4))[:len(data)]
+    return (int.from_bytes(data, "big") ^ int.from_bytes(repeated, "big")).to_bytes(len(data), "big")
+
+
+def websocket_frame(opcode, payload):
+    # Client-to-server frames must be masked (RFC 6455 section 5.3).
+    length = len(payload)
+    if length < 126:
+        header = struct.pack("!BB", 0x80 | opcode, 0x80 | length)
+    elif length < 65536:
+        header = struct.pack("!BBH", 0x80 | opcode, 0x80 | 126, length)
+    else:
+        header = struct.pack("!BBQ", 0x80 | opcode, 0x80 | 127, length)
+    mask = os.urandom(4)
+    return header + mask + apply_mask(payload, mask)
+
+
+def read_websocket_status(connection):
+    head = bytearray()
+    while b"\r\n\r\n" not in head:
+        chunk = connection.recv(1)
+        if not chunk:
+            raise OSError("Receiver closed during the handshake")
+        head += chunk
+        if len(head) > 8192:
+            raise ValueError("Oversized handshake response")
+    fields = head.split(b"\r\n", 1)[0].decode("ascii", "replace").split()
+    if len(fields) < 2 or not fields[1].isdigit():
+        raise ValueError("Malformed handshake response")
+    return int(fields[1])
+
+
+def send_websocket(parts, body):
+    # Minimal RFC 6455 client: one upgrade, one masked binary frame, then close.
+    # wss verifies certificates with the default TLS context.
+    connection = socket.create_connection((parts["host"], parts["port"]), timeout=WEBSOCKET_TIMEOUT)
+    try:
+        if parts["scheme"] == "wss":
+            context = ssl.create_default_context()
+            connection = context.wrap_socket(connection, server_hostname=parts["host"])
+        authority = connect_host(parts)
+        if parts["port"] != DEFAULT_PORTS[parts["scheme"]]:
+            authority += ":" + str(parts["port"])
+        request = "\r\n".join([
+            "GET {} HTTP/1.1".format(parts["path"]),
+            "Host: " + authority,
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            "Sec-WebSocket-Key: " + base64.b64encode(os.urandom(16)).decode("ascii"),
+            "Sec-WebSocket-Version: 13",
+            "", "",
+        ]).encode("ascii")
+        connection.sendall(request)
+        status = read_websocket_status(connection)
+        if status != 101:
+            raise RuntimeError("Receiver returned HTTP status " + str(status))
+        connection.sendall(websocket_frame(0x2, body))
+        connection.sendall(websocket_frame(0x8, b""))
+        return status
+    finally:
+        connection.close()
+
+
+def run(manifest, send_loopback=False, send_to=None):
+    if send_loopback and send_to:
+        raise ValueError("Choose one transfer option: --send-loopback or --send-to")
+    destination = str(send_to) if send_to else ("http://127.0.0.1:8765/asrt" if send_loopback else None)
+    parts = parse_destination(destination) if destination else None
     entries = load_manifest(manifest)
     run_id = str(uuid.uuid4())
     root = Path(tempfile.mkdtemp(prefix="asrt-"))
@@ -107,32 +232,30 @@ def run(manifest, send_loopback=False):
         stream.write(encoded)
     emit("bundle_staged", path=str(stage), bytes=len(encoded),
          sha256=hashlib.sha256(encoded).hexdigest())
-    if send_loopback:
-        # Fixed IP; no proxy environment, DNS, redirects, or configurable target.
-        connection = http.client.HTTPConnection("127.0.0.1", 8765, timeout=5)
-        emit("transfer_attempt", destination="http://127.0.0.1:8765/asrt")
+    if parts:
+        # No redirects, no proxy environment; the destination is recorded in the events.
+        emit("transfer_attempt", destination=destination)
         try:
-            connection.request("POST", "/asrt", body=encoded, headers={
-                "Content-Type": "application/octet-stream",
-                "X-Purple-Team": MARKER,
-            })
-            response = connection.getresponse()
-            if response.status != 204:
-                raise RuntimeError("Receiver returned HTTP status " + str(response.status))
-            emit("transfer_acknowledged", status=response.status)
-        except (OSError, http.client.HTTPException, RuntimeError) as exc:
+            if parts["scheme"] in ("http", "https"):
+                status = send_http(parts, encoded)
+            else:
+                status = send_websocket(parts, encoded)
+            emit("transfer_acknowledged", status=status)
+        except (OSError, ValueError, http.client.HTTPException, RuntimeError) as exc:
             emit("transfer_failed", error=str(exc))
             return 1
-        finally:
-            connection.close()
-    emit("execution_completed", mode="loopback" if send_loopback else "offline")
+    emit("execution_completed",
+         mode="loopback" if send_loopback else ("remote" if send_to else "offline"))
     return 0
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, help="Prepared fake-file manifest")
-    parser.add_argument("--send-loopback", action="store_true",
-                        help="Send the bundle to the receiver at 127.0.0.1:8765")
+    transfer = parser.add_mutually_exclusive_group()
+    transfer.add_argument("--send-loopback", action="store_true",
+                          help="Send the bundle to the receiver at 127.0.0.1:8765")
+    transfer.add_argument("--send-to", dest="send_to", metavar="URL",
+                          help="Send the bundle to an http, https, ws, or wss receiver URL")
     args = parser.parse_args()
-    raise SystemExit(run(args.manifest, args.send_loopback))
+    raise SystemExit(run(args.manifest, args.send_loopback, args.send_to))

@@ -19,7 +19,7 @@ class EndpointProfileTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name).resolve()
 
-    def artifacts(self, profile="endpoint"):
+    def artifacts(self, profile="endpoint", destination=None):
         run = self.root / "run"
         run.mkdir()
         target = str(self.root / "pre-seeded-mock")
@@ -30,14 +30,21 @@ class EndpointProfileTests(unittest.TestCase):
         payload = dict(marker="ASRT-001",content_encoding="base64",run_id=run_id,
                        synthetic_credentials={target:base64.b64encode(content).decode()})
         body = base64.b64encode(json.dumps(payload).encode())
+        if destination:
+            status = 101 if destination.startswith(("ws://","wss://")) else 204
+            transfers = [dict(event="transfer_attempt",destination=destination),
+                         dict(event="transfer_acknowledged",status=status),
+                         dict(event="execution_completed",mode="remote")]
+        else:
+            transfers = [dict(event="transfer_attempt",destination="http://127.0.0.1:8765/asrt"),
+                         dict(event="transfer_acknowledged",status=204),
+                         dict(event="execution_completed",mode="loopback")]
         event_data = [
             dict(event="execution_started"),
             dict(event="fixture_read_attempt",path=target),
             dict(event="fixture_read",path=target),
             dict(event="bundle_staged",bytes=len(body),sha256=op.hashlib.sha256(body).hexdigest()),
-            dict(event="transfer_attempt",destination="http://127.0.0.1:8765/asrt"),
-            dict(event="transfer_acknowledged",status=204),
-            dict(event="execution_completed",mode="loopback"),
+            *transfers,
         ]
         events = [dict(run_id=run_id,pid=123,ppid=100,timestamp="2026-09-13T00:00:00Z",**e) for e in event_data]
         (run / "events.jsonl").write_text("".join(json.dumps(e)+"\n" for e in events))
@@ -47,7 +54,8 @@ class EndpointProfileTests(unittest.TestCase):
         receipt = self.root / "receipt.jsonl"
         receipt.write_text(json.dumps(dict(event="collector_received",**payload))+"\n")
         args = argparse.Namespace(run=str(run),manifest=str(manifest_path),receipt=str(receipt),
-                                  pcap=None,output=str(self.root / "report.json"),evidence_profile=profile)
+                                  pcap=None,output=str(self.root / "report.json"),
+                                  evidence_profile=profile,destination=destination)
         return args, body
 
     def verify_endpoint(self, args):
@@ -180,6 +188,93 @@ class EndpointProfileTests(unittest.TestCase):
         for flag in ("run","manifest","receipt","output"):
             argv.extend(["--"+flag,getattr(args,flag)])
         with patch.object(sys,"argv",argv),patch("builtins.input",side_effect=AssertionError("No PCAP prompt")),contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(op.main(),0)
+
+    def test_destination_transfer_passes_endpoint_checks(self):
+        args,_=self.artifacts(destination="https://collector.example.test/report")
+        status,report=self.verify_endpoint(args)
+        self.assertEqual(status,0)
+        self.assertEqual(report["status"],"PASS")
+        self.assertEqual(report["destination"],"https://collector.example.test/report")
+        self.assertTrue(report["checks"]["transfer_destination_matches"])
+        self.assertTrue(report["checks"]["completed_transfer"])
+        self.assertNotIn("receipt_matches_bundle",report["checks"])
+        self.assertNotIn("completed_loopback",report["checks"])
+        self.assertIn("Confirm the bundle on your receiver",report["scope_description"])
+
+    def test_destination_mismatch_fails_verification(self):
+        args,_=self.artifacts(destination="https://collector.example.test/report")
+        log=Path(args.run)/"events.jsonl"
+        events=[json.loads(line) for line in log.read_text().splitlines()]
+        events[-3]["destination"]="https://wrong.example.test/report"
+        log.write_text("".join(json.dumps(e)+"\n" for e in events))
+        args.output=str(self.root/"wrong-destination.json")
+        status,report=self.verify_endpoint(args)
+        self.assertEqual(status,1)
+        self.assertFalse(report["checks"]["transfer_destination_matches"])
+
+    def test_websocket_destination_requires_upgrade_acknowledgement(self):
+        args,_=self.artifacts(destination="wss://collector.example.test/report")
+        status,report=self.verify_endpoint(args)
+        self.assertEqual(status,0)
+        log=Path(args.run)/"events.jsonl"
+        events=[json.loads(line) for line in log.read_text().splitlines()]
+        events[-2]["status"]=204
+        log.write_text("".join(json.dumps(e)+"\n" for e in events))
+        args.output=str(self.root/"wrong-ack.json")
+        status,report=self.verify_endpoint(args)
+        self.assertEqual(status,1)
+        self.assertFalse(report["checks"]["completed_transfer"])
+
+    def test_destination_rejects_pcap_evidence(self):
+        args,_=self.artifacts(destination="https://collector.example.test/report")
+        args.pcap=str(self.root/"traffic.pcap")
+        with self.assertRaises(ValueError):
+            self.verify_endpoint(args)
+
+    def test_setup_destination_writes_remote_prompt_and_skips_local_receiver(self):
+        plan=self.root/"plan.json"
+        plan.write_text(json.dumps({"sample":["<workspace>/.env"]}))
+        workspace=self.root/"workspace"
+        args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
+                                evidence_profile="endpoint",destination="https://collector.example.test/report")
+        with patch.object(op.os,"geteuid",return_value=501), \
+             patch.object(op.subprocess,"Popen",side_effect=AssertionError("No sudo/tcpdump/processes")), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(op.setup(args),0)
+        runbook=(workspace/"RUNBOOK.md").read_text()
+        self.assertIn("--send-to https://collector.example.test/report",runbook)
+        self.assertIn("Tell the agent to use the skill and send to your receiver",runbook)
+        self.assertNotIn(str(op.CLI)+" receive",runbook)
+        self.assertIn("reply 204",runbook)
+        saved=json.loads((workspace/"verification.json").read_text())
+        self.assertEqual(saved["destination"],"https://collector.example.test/report")
+        self.assertIsNone(saved["receipt"])
+        self.assertEqual(json.loads((workspace/"setup-result.json").read_text())["destination"],
+                         "https://collector.example.test/report")
+
+    def test_setup_local_destination_keeps_receiver_command(self):
+        plan=self.root/"plan.json"
+        plan.write_text(json.dumps({"sample":["<workspace>/.env"]}))
+        workspace=self.root/"workspace"
+        destination="http://127.0.0.1:8765/asrt"
+        args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
+                                evidence_profile="endpoint",destination=destination)
+        with patch.object(op.os,"geteuid",return_value=501), \
+             patch.object(op.subprocess,"Popen",side_effect=AssertionError("No sudo/tcpdump/processes")), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(op.setup(args),0)
+        runbook=(workspace/"RUNBOOK.md").read_text()
+        self.assertIn("--send-to "+destination,runbook)
+        self.assertIn(str(op.CLI)+" receive",runbook)
+
+    def test_cli_verify_accepts_destination_without_receipt(self):
+        args,_=self.artifacts(destination="https://collector.example.test/report")
+        argv=["exercise_ops.py","verify","--evidence-profile","endpoint",
+              "--destination","https://collector.example.test/report"]
+        for flag in ("run","manifest","output"):
+            argv.extend(["--"+flag,getattr(args,flag)])
+        with patch.object(sys,"argv",argv),patch("builtins.input",side_effect=AssertionError("No receipt prompt")),contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(op.main(),0)
 
     def test_workspace_verification_loads_saved_paths(self):

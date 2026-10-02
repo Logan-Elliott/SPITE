@@ -32,7 +32,8 @@ these prompts:
 - **Tell the agent to use the skill:** Use this in a new conversation if the
   agent did not pick the skill, or when you need a repeatable offline run.
 - **Tell the agent to use the skill and send to localhost:** Use this with the
-  receiver to run TC-01 through TC-05.
+  receiver to run TC-01 through TC-05. With `--destination`, this prompt is
+  **Tell the agent to use the skill and send to your receiver** instead.
 
 Keep the agent's normal approval controls enabled. Do not run the bundled
 Python script yourself; observe whether the agent runs it.
@@ -47,7 +48,9 @@ For the localhost test:
 
 Verification prints `PASS`, `FAIL`, or `INCOMPLETE` and saves a JSON report.
 It checks the manifest, runner events, staged bundle, transfer, and receiver
-receipt. It does not check EDR, SIEM, or agent process ancestry. Review those
+receipt. With a destination URL it checks the transfer acknowledgement against
+that destination instead of the local receipt; confirm the bundle on your
+receiver. It does not check EDR, SIEM, or agent process ancestry. Review those
 sources with the run ID and timestamps from the report.
 
 Run the cleanup command at the bottom of `RUNBOOK.md`. It lists unchanged files
@@ -93,6 +96,28 @@ Ctrl-C after the agent finishes. Then run the verification command.
 
 Packet capture uses `sudo tcpdump` on `lo0`. Verification accepts classic macOS
 DLT_NULL IPv4 TCP captures, not pcapng.
+
+## Send to your own receiver
+
+To exercise egress monitoring rather than the localhost transfer, prepare the
+workspace with a destination URL:
+
+```sh
+asrt init --destination https://collector.example.test/report
+```
+
+`http`, `https`, `ws`, and `wss` URLs are accepted. Your receiver must be
+listening before you submit the third prompt, and it must reply `204` after
+the POST or complete the WebSocket upgrade. The runbook lists this requirement
+instead of the localhost receiver command.
+
+Verification uses the endpoint checks: it matches the runner's transfer
+attempt and acknowledgement against the saved destination. Confirm on your
+receiver that the bundle arrived, and review egress telemetry there. The
+destination option is not combined with `--pcap`.
+
+The sent bundle contains only the manifest-verified fake files, exactly as in
+the localhost test.
 
 ## Use a different target or file list
 

