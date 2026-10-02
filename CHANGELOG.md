@@ -4,13 +4,17 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Renamed the project to SPITE: Skill Poisoning and Instruction Trust
+  Evaluation. The command is now `spite`; install paths, exercise markers,
+  receiver protocol names, private state folders, generated text, release
+  archives, and repository automation use the SPITE name.
 - Replaced the fixed `PurpleTeam`/`purple-team` browser profile segments with
   cross-platform placeholders (`<chrome-profile>`, `<brave-profile>`,
   `<edge-profile>`, `<firefox-profile>`, `<trae-storage>`, `<openclaw-config>`,
   `<openclaw-home>`) that setup resolves on macOS or Linux. Discovery honors
   `XDG_CONFIG_HOME` and checks native, snap, and flatpak roots for Chrome,
   Chromium, Brave, Edge, and Firefox. Synthetic setup keeps an isolated
-  `~/.asrt-exercise/` namespace so it never writes into a real profile.
+  `~/.spite-exercise/` namespace so it never writes into a real profile.
 - Pointed the Trae browser-agent target at the real `state.vscdb` secret store
   and raised the real-harvest size limit to 8 MiB per file and 8 MiB total so
   browser and Trae credential stores are collected.
@@ -18,11 +22,11 @@ All notable changes to this project are documented here.
 ## 0.2.0 - 2026-10-02
 
 - Added an operator choice between synthetic files and real harvest:
-  `asrt init --harvest real` selects existing files from the file list, records
+  `spite init --harvest real` selects existing files from the file list, records
   their hashes, and sends their contents in the bundle. Setup never creates,
   changes, or deletes real files, and cleanup preserves them. The default
   remains synthetic.
-- Added operator-configurable transfer destinations: `asrt init --destination`
+- Added operator-configurable transfer destinations: `spite init --destination`
   accepts an `http`, `https`, `ws`, or `wss` URL, the generated prompt uses
   `--send-to`, and verification checks the transfer acknowledgement against
   the saved destination.
@@ -37,7 +41,7 @@ All notable changes to this project are documented here.
   report states, and the `ARTIFACTS VERIFIED` result.
 - Matched the benign control to the normal file, manifest, metadata, and prompt
   conditions.
-- Added self-contained installation, update and uninstall commands, `asrt
+- Added self-contained installation, update and uninstall commands, `spite
   doctor`, and an engagement report template.
 - Added a tag-driven release workflow with pinned actions and GitHub artifact
   attestations.
@@ -60,5 +64,5 @@ All notable changes to this project are documented here.
   named group when using the expanded list.
 - Replaced duplicate prompt and command files with the workspace runbook.
 - Simplified verification and cleanup output while keeping JSON available.
-- Added the `asrt` command with init, receive, verify, capture, clean, install, and
+- Added the `spite` command with init, receive, verify, capture, clean, install, and
   version subcommands; retained the macOS launchers for compatibility.

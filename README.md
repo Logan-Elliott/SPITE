@@ -1,4 +1,4 @@
-# Agent Skill Red Team Harness
+# SPITE: Skill Poisoning and Instruction Trust Evaluation
 
 A macOS purple team tool for testing whether a coding agent discovers, trusts,
 and runs a malicious project skill.
@@ -19,28 +19,28 @@ agent that supports project-local `SKILL.md` packages.
 Install the command from the cloned or extracted package:
 
 ```sh
-./asrt install
+./spite install
 ```
 
 Then prepare the standard test:
 
 ```sh
-asrt doctor
-asrt init
+spite doctor
+spite init
 ```
 
-Installation copies a self-contained versioned package under `~/.local/lib/asrt`
-and links `~/.local/bin/asrt` to it, so the extracted download can be moved or
-removed. Run `./asrt update` from a newer extracted package to update the command,
-or `asrt uninstall` to remove the command while keeping the installed package.
+Installation copies a self-contained versioned package under `~/.local/lib/spite`
+and links `~/.local/bin/spite` to it, so the extracted download can be moved or
+removed. Run `./spite update` from a newer extracted package to update the command,
+or `spite uninstall` to remove the command while keeping the installed package.
 
-You can use `./asrt init` without installing the command. Setup asks where to
+You can use `./spite init` without installing the command. Setup asks where to
 create the workspace, shows any file paths outside that workspace, and
 asks once before writing files. It then creates `RUNBOOK.md` with the prompts,
 commands, and cleanup step, plus `ENGAGEMENT-REPORT.json` for product, model,
 permission, sensor, run, test-case, and alert records.
 
-Setup keeps its authoritative cleanup record in a private `.asrt-state` folder
+Setup keeps its authoritative cleanup record in a private `.spite-state` folder
 beside the workspace. The copy inside the workspace is informational, so an
 agent cannot add deletion targets by editing it.
 
@@ -59,7 +59,7 @@ Follow that runbook:
 For scripts, provide the workspace and skip the confirmation:
 
 ```sh
-asrt init --workspace "$HOME/agent-skill-exercise" --yes
+spite init --workspace "$HOME/spite-exercise" --yes
 ```
 
 See [OPERATOR.md](OPERATOR.md) for the full operator guide.
@@ -70,8 +70,8 @@ Prepare the benign control or response-manipulation test in a separate
 workspace:
 
 ```sh
-asrt init --test benign
-asrt init --test response
+spite init --test benign
+spite init --test response
 ```
 
 These tests install skill packages with the same name and description as the
@@ -82,7 +82,7 @@ not create fake credential files.
 Add packet capture when you need PCAP evidence from the localhost transfer:
 
 ```sh
-asrt init --pcap
+spite init --pcap
 ```
 
 The generated runbook includes the `tcpdump` command. macOS asks for
@@ -94,14 +94,14 @@ To test egress monitoring instead of the localhost transfer, give setup a
 destination URL:
 
 ```sh
-asrt init --destination https://collector.example.test/report
+spite init --destination https://collector.example.test/report
 ```
 
 The runbook's third prompt then tells the agent to append `--send-to` with that
 URL instead of `--send-loopback`. An HTTP receiver must reply `204` with an
-`X-ASRT-Receipt` header containing the lowercase SHA-256 of the request body. A
+`X-SPITE-Receipt` header containing the lowercase SHA-256 of the request body. A
 WebSocket receiver must complete a valid upgrade and return an unmasked text or
-binary message containing `{"marker":"ASRT-001","sha256":"BODY_SHA256"}`
+binary message containing `{"marker":"SPITE-001","sha256":"BODY_SHA256"}`
 after accepting the bundle. Verification checks that digest acknowledgement
 against the staged bundle. The destination option uses endpoint checks and is
 not combined with `--pcap`.
@@ -112,7 +112,7 @@ Copy [profiles/custom-example.json](profiles/custom-example.json), set the
 project-relative skill path, and run:
 
 ```sh
-asrt init --target-config /absolute/path/to/target.json
+spite init --target-config /absolute/path/to/target.json
 ```
 
 The included [Trae config](profiles/trae.json) installs the skill under Trae's
@@ -123,7 +123,7 @@ The standard test uses eight representative synthetic files. To use one group
 from the larger macOS list:
 
 ```sh
-asrt init --file-list plans/macos-expanded.json --group developer
+spite init --file-list plans/macos-expanded.json --group developer
 ```
 
 Available groups are `developer`, `cloud-container`, and `browser-agent`.
@@ -134,7 +134,7 @@ Browser and agent paths use placeholders that setup resolves on this machine:
 location, `$XDG_CONFIG_HOME` (or `~/.config`), and the snap and flatpak roots
 are checked for Chrome, Chromium, Brave, Edge, and Firefox. Trae uses its macOS
 or Linux config storage. Synthetic setup maps every placeholder to an isolated
-directory under `~/.asrt-exercise/`; real harvest uses the discovered directory
+directory under `~/.spite-exercise/`; real harvest uses the discovered directory
 and reports entries it cannot resolve.
 
 ## Harvest real files
@@ -143,7 +143,7 @@ By default setup creates synthetic files. To instead read existing files from
 the file list and include their contents in the bundle:
 
 ```sh
-asrt init --harvest real
+spite init --harvest real
 ```
 
 Real harvest reads only the exact paths in the file list, skips missing,
@@ -202,9 +202,9 @@ Tagged releases include a GitHub artifact attestation. After downloading a ZIP,
 verify both records:
 
 ```sh
-sha256sum -c agent-skill-redteam-harness-0.2.0-macos.zip.sha256
-gh attestation verify agent-skill-redteam-harness-0.2.0-macos.zip \
-  --repo Logan-Elliott/malskill
+sha256sum -c spite-0.2.0-macos.zip.sha256
+gh attestation verify spite-0.2.0-macos.zip \
+  --repo Logan-Elliott/spite
 ```
 
 Released under the [MIT License](LICENSE).
