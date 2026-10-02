@@ -6,7 +6,12 @@ A placeholder expands to a full directory and must start the path, for example
 isolated directory under the user's home so they never touch a real profile.
 Real runs discover the directory the product created on this machine, or leave
 the entry unresolved when the product is not installed.
+
+Discovery checks the native macOS and Linux locations, honors XDG_CONFIG_HOME
+for Electron and Chromium-family applications, and also checks snap and flatpak
+roots for Chrome, Chromium, Brave, Edge, and Firefox.
 """
+import os
 import re
 from pathlib import Path
 
@@ -23,16 +28,38 @@ SYNTHETIC_NAMES = {
     "openclaw-home": "openclaw-home",
 }
 
-# macOS relative root first, then Linux relative root(s).
-CHROMIUM_ROOTS = {
-    "chrome-profile": ("Google/Chrome", "google-chrome", "chromium"),
-    "brave-profile": ("BraveSoftware/Brave-Browser",),
-    "edge-profile": ("Microsoft Edge", "microsoft-edge"),
+# macOS relative root, native Linux config-relative roots, snap names, flatpak app ids.
+CHROMIUM = {
+    "chrome-profile": {
+        "macos": "Google/Chrome",
+        "linux": ("google-chrome", "chromium"),
+        "snap": ("chromium",),
+        "flatpak": ("com.google.Chrome", "org.chromium.Chromium"),
+    },
+    "brave-profile": {
+        "macos": "BraveSoftware/Brave-Browser",
+        "linux": ("BraveSoftware/Brave-Browser",),
+        "snap": ("brave",),
+        "flatpak": ("com.brave.Browser",),
+    },
+    "edge-profile": {
+        "macos": "Microsoft Edge",
+        "linux": ("microsoft-edge",),
+        "snap": ("microsoft-edge",),
+        "flatpak": ("com.microsoft.Edge",),
+    },
 }
 
 
 def default_home():
     return Path.home()
+
+
+def _config_home(home):
+    configured = os.environ.get("XDG_CONFIG_HOME")
+    if configured and configured.startswith("/"):
+        return Path(configured)
+    return home / ".config"
 
 
 def _chromium_profile(root):
@@ -94,10 +121,21 @@ def _firefox_profile(root):
 
 
 def _chromium_roots(name, home):
-    macos, *linux = CHROMIUM_ROOTS[name]
-    yield home / "Library/Application Support" / macos
-    for relative in linux:
-        yield home / ".config" / relative
+    spec = CHROMIUM[name]
+    yield home / "Library/Application Support" / spec["macos"]
+    config = _config_home(home)
+    for relative in spec["linux"]:
+        yield config / relative
+    for snap in spec["snap"]:
+        base = home / "snap" / snap
+        for relative in spec["linux"]:
+            yield base / "current/.config" / relative
+            yield base / "common/.config" / relative
+            yield base / "common" / relative
+    for app in spec["flatpak"]:
+        base = home / ".var/app" / app / "config"
+        for relative in spec["linux"]:
+            yield base / relative
 
 
 def _firefox_roots(home):
@@ -110,7 +148,7 @@ def _firefox_roots(home):
 
 
 def discover(name, home):
-    if name in CHROMIUM_ROOTS:
+    if name in CHROMIUM:
         for root in _chromium_roots(name, home):
             profile = _chromium_profile(root)
             if profile is not None:
@@ -124,18 +162,23 @@ def discover(name, home):
         return None
     if name == "trae-storage":
         for root in (home / "Library/Application Support/Trae/User/globalStorage",
-                     home / ".config/Trae/User/globalStorage"):
+                     _config_home(home) / "Trae/User/globalStorage"):
             if root.is_dir() and not root.is_symlink():
                 return root
         return None
-    if name in ("openclaw-config", "openclaw-home"):
-        root = home / (".config/openclaw" if name == "openclaw-config" else ".openclaw")
+    if name == "openclaw-config":
+        for root in (_config_home(home) / "openclaw", home / ".config/openclaw"):
+            if root.is_dir() and not root.is_symlink():
+                return root
+        return None
+    if name == "openclaw-home":
+        root = home / ".openclaw"
         return root if root.is_dir() and not root.is_symlink() else None
     return None
 
 
 def resolve(raw, workspace, source, home=None):
-    """Return the concrete absolute Path for one plan entry, or None when unpublished."""
+    """Return the concrete absolute Path for one plan entry, or None when unresolved."""
     home = home or default_home()
     unresolved = []
 

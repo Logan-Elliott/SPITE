@@ -24,7 +24,12 @@ def chromium_profile(root, profile="Default", login=True):
     return directory
 
 
-class ResolveTests(unittest.TestCase):
+class EnvClean(unittest.TestCase):
+    def setUp(self):
+        os.environ.pop("XDG_CONFIG_HOME", None)
+
+
+class ResolveTests(EnvClean):
     def test_synthetic_maps_placeholders_to_isolated_absolute_dirs(self):
         workspace = Path("/tmp/ws")
         home = Path("/home/nobody")
@@ -45,7 +50,7 @@ class ResolveTests(unittest.TestCase):
                                   home=Path("/home/nobody"))
 
 
-class DiscoverTests(unittest.TestCase):
+class DiscoverTests(EnvClean):
     def test_chromium_prefers_a_profile_that_holds_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()
@@ -58,6 +63,36 @@ class DiscoverTests(unittest.TestCase):
             home = Path(directory).resolve()
             wanted = chromium_profile(home / "Library/Application Support/Google/Chrome", "Default")
             self.assertEqual(profile_paths.discover("chrome-profile", home), wanted)
+
+    def test_chromium_honors_xdg_config_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            xdg = root / "xdg"
+            wanted = chromium_profile(xdg / "chromium", "Default")
+            with patch.dict(os.environ, {"XDG_CONFIG_HOME": str(xdg)}):
+                self.assertEqual(profile_paths.discover("chrome-profile", root / "home"), wanted)
+
+    def test_chromium_finds_a_snap_chromium_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            wanted = chromium_profile(home / "snap/chromium/common/chromium", "Default")
+            self.assertEqual(profile_paths.discover("chrome-profile", home), wanted)
+
+    def test_chromium_finds_a_flatpak_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            wanted = chromium_profile(home / ".var/app/com.google.Chrome/config/google-chrome", "Default")
+            self.assertEqual(profile_paths.discover("chrome-profile", home), wanted)
+
+    def test_trae_storage_honors_xdg_config_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            xdg = root / "xdg"
+            wanted = xdg / "Trae/User/globalStorage"
+            wanted.mkdir(parents=True)
+            (wanted / "state.vscdb").write_bytes(b"sqlite")
+            with patch.dict(os.environ, {"XDG_CONFIG_HOME": str(xdg)}):
+                self.assertEqual(profile_paths.discover("trae-storage", root / "home"), wanted)
 
     def test_firefox_reads_a_linux_profiles_ini(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -90,7 +125,7 @@ class DiscoverTests(unittest.TestCase):
             self.assertIsNone(profile_paths.resolve("<chrome-profile>/Login Data", Path("/tmp/ws"), "real", home=home))
 
 
-class PreparePlaceholderTests(unittest.TestCase):
+class PreparePlaceholderTests(EnvClean):
     def test_synthetic_creates_the_isolated_profile_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
