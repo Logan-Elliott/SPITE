@@ -51,9 +51,9 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertTrue((workspace/".example/skills/agent-workspace-preflight/SKILL.md").is_file())
             prompts=(workspace/"AGENT-PROMPTS.txt").read_text()
             self.assertIn("Use the agent-workspace-preflight skill",prompts)
-            self.assertIn("Operator run R01 — Implicit selection, offline",prompts)
-            self.assertIn("Operator run R02 — Explicit invocation, offline",prompts)
-            self.assertIn("Operator run R03 — Explicit invocation, loopback",prompts)
+            self.assertIn("Implicit selection (offline)",prompts)
+            self.assertIn("Explicit invocation (offline)",prompts)
+            self.assertIn("Loopback transfer",prompts)
             result=json.loads((workspace/"setup-result.json").read_text())
             self.assertEqual(result["target_profile"],"example-agent")
             self.assertEqual(result["target_display_name"],"Example Agent")
@@ -62,8 +62,8 @@ class CombinedSetupTests(unittest.TestCase):
 
     def test_setup_installs_each_control_variant_and_generates_its_prompt(self):
         cases = {
-            "benign-control": ("Control C01", "Do not run commands"),
-            "answer-contamination": ("Operator run R04", "ASRT-002"),
+            "benign-control": ("Benign baseline", "Do not run commands"),
+            "answer-contamination": ("Response manipulation", "ASRT-002"),
         }
         for variant, (prompt_marker, skill_marker) in cases.items():
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as directory:
