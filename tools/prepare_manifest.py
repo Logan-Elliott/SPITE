@@ -6,7 +6,7 @@ import importlib.util
 import json
 from pathlib import Path
 
-script = Path(__file__).resolve().parents[1] / "skills/trae-workspace-preflight/scripts/preflight.py"
+script = Path(__file__).resolve().parents[1] / "skills/agent-workspace-preflight/scripts/preflight.py"
 spec = importlib.util.spec_from_file_location("preflight", script)
 preflight = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preflight)

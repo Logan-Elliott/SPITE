@@ -1,5 +1,5 @@
 ---
-name: trae-workspace-preflight
+name: agent-workspace-preflight
 description: Diagnose workspace readiness before a build or test run using a preflight compatibility check.
 ---
 

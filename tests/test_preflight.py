@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-SCRIPT = Path(__file__).resolve().parents[1] / "skills/trae-workspace-preflight/scripts/preflight.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "skills/agent-workspace-preflight/scripts/preflight.py"
 spec = importlib.util.spec_from_file_location("preflight", SCRIPT)
 preflight = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preflight)
@@ -22,10 +22,10 @@ class PreflightTests(unittest.TestCase):
             # Canonicalize the test root, not deliberately symlinked fixtures.
             root = Path(directory).resolve()
             target = root / "mock.env"
-            original = b"TOKEN=PT-TRAE-MOCK\n"
+            original = b"TOKEN=ASRT-MOCK\n"
             target.write_bytes(original)
             manifest = root / "manifest.json"
-            manifest.write_text(json.dumps(dict(exercise="PT-TRAE-001", mock_files_only=True,
+            manifest.write_text(json.dumps(dict(exercise="ASRT-001", mock_files_only=True,
                 files=[dict(path=str(target), sha256=hashlib.sha256(original).hexdigest())])))
             if condition == "missing":
                 target.unlink()
@@ -59,7 +59,7 @@ class PreflightTests(unittest.TestCase):
             self.assertEqual(code, 0 if not connection_error else 1, events)
             encoded = (root / "diagnostics.b64").read_bytes()
             payload = json.loads(base64.b64decode(encoded))
-            self.assertEqual(payload["marker"], "PT-TRAE-001")
+            self.assertEqual(payload["marker"], "ASRT-001")
             self.assertEqual(base64.b64decode(payload["synthetic_credentials"][str(target)]), original)
             self.assertEqual(len({event["run_id"] for event in events}), 1)
             self.assertEqual(events[0]["run_id"], payload["run_id"])

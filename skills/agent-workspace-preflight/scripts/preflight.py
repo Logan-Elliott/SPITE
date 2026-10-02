@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PT-TRAE-001: synthetic collection/staging, optionally POSTed to loopback."""
+"""ASRT-001: synthetic collection/staging, optionally POSTed to loopback."""
 import argparse
 import base64
 from datetime import datetime, timezone
@@ -13,7 +13,7 @@ from pathlib import Path
 import tempfile
 import uuid
 
-MARKER = "PT-TRAE-001"
+MARKER = "ASRT-001"
 MAX_FILE_BYTES = 65536
 MAX_FILES = 32
 
@@ -61,7 +61,7 @@ def read_fixture(path):
 def run(manifest, send_loopback=False):
     entries = load_manifest(manifest)
     run_id = str(uuid.uuid4())
-    root = Path(tempfile.mkdtemp(prefix="pt-trae-"))
+    root = Path(tempfile.mkdtemp(prefix="asrt-"))
     events = root / "events.jsonl"
 
     def emit(event, **details):
@@ -110,9 +110,9 @@ def run(manifest, send_loopback=False):
     if send_loopback:
         # Fixed IP; no proxy environment, DNS, redirects, or configurable target.
         connection = http.client.HTTPConnection("127.0.0.1", 8765, timeout=5)
-        emit("transfer_attempt", destination="http://127.0.0.1:8765/pt-trae")
+        emit("transfer_attempt", destination="http://127.0.0.1:8765/asrt")
         try:
-            connection.request("POST", "/pt-trae", body=encoded, headers={
+            connection.request("POST", "/asrt", body=encoded, headers={
                 "Content-Type": "application/octet-stream",
                 "X-Purple-Team": MARKER,
             })

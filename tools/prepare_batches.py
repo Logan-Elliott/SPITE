@@ -58,7 +58,7 @@ def prepare(plan, workspace, output):
                     # Hash the known bytes just written; never read existing targets.
                     entries.append(dict(path=str(path), sha256=digest))
             if entries:
-                manifest = dict(exercise="PT-TRAE-001", mock_files_only=True, files=entries)
+                manifest = dict(exercise="ASRT-001", mock_files_only=True, files=entries)
                 with (output / (batch + ".json")).open("x") as stream:
                     json.dump(manifest, stream, indent=2)
                     stream.write("\n")

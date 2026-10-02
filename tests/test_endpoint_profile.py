@@ -23,11 +23,11 @@ class EndpointProfileTests(unittest.TestCase):
         run = self.root / "run"
         run.mkdir()
         target = str(self.root / "pre-seeded-mock")
-        content = b"PT-TRAE-001 synthetic artifact test"
+        content = b"ASRT-001 synthetic artifact test"
         run_id = "22222222-2222-4222-8222-222222222222"
-        manifest = dict(exercise="PT-TRAE-001", mock_files_only=True,
+        manifest = dict(exercise="ASRT-001", mock_files_only=True,
                         files=[dict(path=target,sha256=op.hashlib.sha256(content).hexdigest())])
-        payload = dict(marker="PT-TRAE-001",content_encoding="base64",run_id=run_id,
+        payload = dict(marker="ASRT-001",content_encoding="base64",run_id=run_id,
                        synthetic_credentials={target:base64.b64encode(content).decode()})
         body = base64.b64encode(json.dumps(payload).encode())
         event_data = [
@@ -35,7 +35,7 @@ class EndpointProfileTests(unittest.TestCase):
             dict(event="fixture_read_attempt",path=target),
             dict(event="fixture_read",path=target),
             dict(event="bundle_staged",bytes=len(body),sha256=op.hashlib.sha256(body).hexdigest()),
-            dict(event="transfer_attempt",destination="http://127.0.0.1:8765/pt-trae"),
+            dict(event="transfer_attempt",destination="http://127.0.0.1:8765/asrt"),
             dict(event="transfer_acknowledged",status=204),
             dict(event="execution_completed",mode="loopback"),
         ]
@@ -127,7 +127,7 @@ class EndpointProfileTests(unittest.TestCase):
         args,body=self.artifacts("pcap")
         args.pcap=str(self.root/"traffic.pcap")
         with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(op.verify(args),2)
-        request=b"POST /pt-trae HTTP/1.1\r\nContent-Length: "+str(len(body)).encode()+b"\r\n\r\n"+body
+        request=b"POST /asrt HTTP/1.1\r\nContent-Length: "+str(len(body)).encode()+b"\r\n\r\n"+body
         Path(args.pcap).write_bytes(pcap([(50000,8765,100,request),(8765,50000,200,b"HTTP/1.0 204 No Content\r\n\r\n")]))
         args.output=str(self.root/"pcap-pass.json")
         with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(op.verify(args),0)

@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "id": "custom-agent",
+  "display_name": "Custom project agent",
+  "skill_name": "agent-workspace-preflight",
+  "install_path": ".agent/skills/agent-workspace-preflight"
+}
