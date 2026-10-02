@@ -26,8 +26,12 @@
   "browser-agent": [
     "<chrome-profile>/Login Data",
     "<chrome-profile>/Network/Cookies",
+    "<chrome-profile>/Cookies",
     "<brave-profile>/Login Data",
+    "<brave-profile>/Network/Cookies",
+    "<brave-profile>/Cookies",
     "<edge-profile>/Network/Cookies",
+    "<edge-profile>/Cookies",
     "<firefox-profile>/logins.json",
     "<firefox-profile>/key4.db",
     "<firefox-profile>/cookies.sqlite",
