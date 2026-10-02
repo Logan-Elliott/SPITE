@@ -1,7 +1,7 @@
 # Operator guide
 
-Setup creates fake files and installs the test skill. It does not start the
-agent or run the skill.
+Setup creates fake files or selects existing real files, then installs the test
+skill. It does not start the agent or run the skill.
 
 ## Run the standard test
 
@@ -116,8 +116,24 @@ attempt and acknowledgement against the saved destination. Confirm on your
 receiver that the bundle arrived, and review egress telemetry there. The
 destination option is not combined with `--pcap`.
 
-The sent bundle contains only the manifest-verified fake files, exactly as in
-the localhost test.
+The sent bundle contains only the manifest-verified files, exactly as in the
+localhost test.
+
+## Harvest real files
+
+The standard setup creates synthetic files. To read existing files from the file
+list instead, choose real harvest:
+
+```sh
+asrt init --harvest real
+```
+
+Real harvest reads only the exact paths in the file list. Missing, symlinked,
+special, and oversized files are skipped and recorded in `selections.jsonl`.
+Setup never creates, changes, or deletes these files, and cleanup preserves
+them. The runbook records that the workspace uses existing real files. The
+transfer bundle then contains real credential material, so use this option only
+inside an authorized engagement and only with a receiver you control.
 
 ## Use a different target or file list
 

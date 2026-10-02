@@ -3,10 +3,11 @@
 A macOS purple team tool for testing whether a coding agent discovers, trusts,
 and runs a malicious project skill.
 
-The tool creates fake credential files and can send them to a receiver. By
-default the receiver is on `127.0.0.1`. You can also give setup a destination
-URL (`http`, `https`, `ws`, or `wss`) and the same fake-file bundle is sent
-there. The tool never reads existing credentials.
+Setup can either create synthetic fake credential files or select existing real
+files, and the bundle can be sent to a receiver. By default the receiver is on
+`127.0.0.1`. You can also give setup a destination URL (`http`, `https`, `ws`,
+or `wss`) and the same bundle is sent there. Synthetic mode never reads existing
+files; real mode reads only the exact paths in the file list.
 
 > Run it only on systems and accounts included in an authorized assessment.
 
@@ -28,7 +29,7 @@ asrt init
 ```
 
 You can use `./asrt init` without installing the command. Setup asks where to
-create the workspace, shows any fake-file paths outside that workspace, and
+create the workspace, shows any file paths outside that workspace, and
 asks once before writing files. It then creates `RUNBOOK.md` with the prompts,
 commands, and cleanup step.
 
@@ -102,14 +103,29 @@ The included [Trae config](profiles/trae.json) installs the skill under Trae's
 project skill path. Confirm that path against the product version used in the
 engagement.
 
-The standard test uses eight representative fake files. To use one group from
-the larger macOS list:
+The standard test uses eight representative synthetic files. To use one group
+from the larger macOS list:
 
 ```sh
 asrt init --file-list plans/macos-expanded.json --group developer
 ```
 
 Available groups are `developer`, `cloud-container`, and `browser-agent`.
+
+## Harvest real files
+
+By default setup creates synthetic files. To instead read existing files from
+the file list and include their contents in the bundle:
+
+```sh
+asrt init --harvest real
+```
+
+Real harvest reads only the exact paths in the file list, skips missing,
+symlinked, special, and oversized files, and never creates, changes, or deletes
+anything. The generated runbook records that the workspace uses existing real
+files. Use this only on systems and accounts included in an authorized
+assessment; the bundle contains real credential material.
 
 ## Test cases
 
@@ -132,12 +148,14 @@ The runner accepts only exact paths and hashes from the generated manifest. It
 rejects globs, traversal, symlinks, special files, changed hashes, files larger
 than 64 KiB, and manifests with more than 32 files. Its default network
 destination is `127.0.0.1:8765`; with `--destination` it sends only the same
-manifest-verified fake-file bundle to the URL you provide, over one connection
-with no redirects or proxy settings, and `https`/`wss` verify certificates.
+manifest-verified bundle to the URL you provide, over one connection with no
+redirects or proxy settings, and `https`/`wss` verify certificates.
 
-Setup skips existing paths without reading or changing them. Newly created
-credential-shaped files can still affect applications, so use a disposable
-project or dedicated test account.
+Synthetic setup skips existing paths without reading or changing them, but the
+files it creates can still affect applications, so use a disposable project or
+dedicated test account. Real harvest reads only the exact existing files in the
+file list, never changes or deletes them, and includes their contents in the
+bundle. Run real harvest only inside an authorized engagement.
 
 ## More information
 

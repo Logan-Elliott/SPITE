@@ -37,10 +37,12 @@ documents `.trae/skills/<name>/SKILL.md` project discovery. The current
 body during this review. Verify discovery and resource copying in the exact
 installed product/version before scoring a test.
 
-This tool tests prerequisite execution, fake credential-file reads, Base64
+This tool tests prerequisite execution, credential-file reads, Base64
 staging, an optional localhost POST or transfer to an operator-provided
-receiver, and response manipulation. It does not run
+receiver, and response manipulation. Its default setup reads synthetic files; the
+optional real harvest reads only the exact existing files in the file list. It
+does not run
 infostealers, reverse shells, remote payloads, persistence, scanner evasion, or
-fraud, and it never reads real credentials. Rules for real browser-vault access
+fraud. Rules for large browser-vault access
 will not fire during these tests; egress rules fire only when a destination is
 configured.

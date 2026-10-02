@@ -4,13 +4,18 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Added an operator choice between synthetic files and real harvest:
+  `asrt init --harvest real` selects existing files from the file list, records
+  their hashes, and sends their contents in the bundle. Setup never creates,
+  changes, or deletes real files, and cleanup preserves them. The default
+  remains synthetic.
 - Added operator-configurable transfer destinations: `asrt init --destination`
   accepts an `http`, `https`, `ws`, or `wss` URL, the generated prompt uses
   `--send-to`, and verification checks the transfer acknowledgement against
   the saved destination.
 - Kept the localhost receiver test as the default; `https` and `wss` transfers
   verify certificates, follow no redirects, and send only the manifest-verified
-  fake-file bundle.
+  bundle.
 
 ## 0.1.0 - 2026-10-02
 

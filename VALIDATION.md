@@ -8,7 +8,8 @@ test agent behavior and detections.
 The current suite covers:
 
 - creating fake files at exact paths without overwriting existing paths or
-  following parent symlinks;
+  following parent symlinks, and selecting existing real files without changing
+  them;
 - manifest validation, file limits, hashes, and changed-file rejection;
 - offline staging, fixed loopback transfer behavior, and destination transfers
   over http, https, ws, and wss;
@@ -29,8 +30,8 @@ The release gate runs the unit suite, parses every Python and JSON source, check
 the macOS launcher syntax when `zsh` is available, builds the operator archive, and
 validates the archive's CRC and `PACKAGE-HASHES.json` contents.
 
-Tests use temporary synthetic files and mocked network connections. They never
-install a skill into an actual agent product or collect existing credential data.
+Tests use temporary files and mocked network connections. They never
+install a skill into an actual agent product or collect real credential data.
 
 ## macOS harness validation
 

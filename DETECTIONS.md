@@ -37,7 +37,8 @@ record `prevented`. If it ran and the expected alert did not fire, record
 `completed-not-detected`. Use `unknown` when the available logs do not show
 whether the action ran.
 
-Setup creates the fake files before the test window. Do not count those writes as
-TC-03. This tool does not test large browser stores, Keychains, or real
-credentials. The localhost transfer does not test egress; use a destination URL
+Synthetic setup creates the fake files before the test window. Do not count those
+writes as TC-03. Real harvest reads only the exact existing paths in the file
+list, still capped at 64 KiB per file, so it does not test large browser stores
+or Keychains. The localhost transfer does not test egress; use a destination URL
 to exercise external network detections.
