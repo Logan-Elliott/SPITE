@@ -130,11 +130,12 @@ Available groups are `developer`, `cloud-container`, and `browser-agent`.
 
 Browser and agent paths use placeholders that setup resolves on this machine:
 `<chrome-profile>`, `<brave-profile>`, `<edge-profile>`, `<firefox-profile>`,
-`<trae-storage>`, `<openclaw-config>`, and `<openclaw-home>`. macOS and Linux
-locations are checked, including snap and flatpak Firefox and the Linux Trae
-storage path. Synthetic setup maps every placeholder to an isolated directory
-under `~/.asrt-exercise/`; real harvest uses the discovered directory and
-reports entries it cannot resolve.
+`<trae-storage>`, `<openclaw-config>`, and `<openclaw-home>`. The native macOS
+location, `$XDG_CONFIG_HOME` (or `~/.config`), and the snap and flatpak roots
+are checked for Chrome, Chromium, Brave, Edge, and Firefox. Trae uses its macOS
+or Linux config storage. Synthetic setup maps every placeholder to an isolated
+directory under `~/.asrt-exercise/`; real harvest uses the discovered directory
+and reports entries it cannot resolve.
 
 ## Harvest real files
 

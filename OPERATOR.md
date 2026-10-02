@@ -189,9 +189,10 @@ asrt init --file-list plans/macos-expanded.json --group cloud-container
 
 Browser and agent paths use placeholders that setup resolves on this machine:
 `<chrome-profile>`, `<brave-profile>`, `<edge-profile>`, `<firefox-profile>`,
-`<trae-storage>`, `<openclaw-config>`, and `<openclaw-home>`. Both macOS and
-Linux locations are checked, including snap and flatpak Firefox and the Linux
-Trae storage path. Synthetic setup maps each placeholder to an isolated
+`<trae-storage>`, `<openclaw-config>`, and `<openclaw-home>`. The native macOS
+location, `$XDG_CONFIG_HOME` (or `~/.config`), and the snap and flatpak roots
+are checked for Chrome, Chromium, Brave, Edge, and Firefox. Trae uses its macOS
+or Linux config storage. Synthetic setup maps each placeholder to an isolated
 directory under `~/.asrt-exercise/` so it never touches a real profile. Real
 harvest uses the discovered directory and records `unresolved` for products that
 are not installed.
