@@ -2,6 +2,7 @@ import argparse
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -122,6 +123,8 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertEqual(result["evidence_profile"],"endpoint")
             self.assertEqual(result["skill_variant"],"main")
             self.assertTrue((workspace/"RUNBOOK.md").is_file())
+            report=json.loads((workspace/"ENGAGEMENT-REPORT.json").read_text())
+            self.assertEqual(sorted(report["test_cases"]),["TC-01","TC-02","TC-03","TC-04","TC-05","TC-06"])
             self.assertIn("Next step:",output.getvalue())
 
     def test_target_profile_rejects_traversal_and_extra_fields(self):
@@ -150,6 +153,36 @@ class CombinedSetupTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn("Capture TCP port 8765",result.stdout)
         self.assertNotIn("sudo",result.stderr.lower())
+
+    def test_install_copies_a_versioned_package_and_uninstall_keeps_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve()
+            environment=dict(os.environ,ASRT_BIN_DIR=str(root/"bin"),ASRT_LIB_DIR=str(root/"lib"))
+            installed=subprocess.run([str(op.CLI),"install"],cwd=op.ROOT,env=environment,
+                                     text=True,capture_output=True)
+            self.assertEqual(installed.returncode,0,installed.stderr)
+            command=root/"bin/asrt"
+            package=root/"lib"/(op.ROOT/"VERSION").read_text().strip()
+            self.assertEqual(command.resolve(),package/"asrt")
+            self.assertNotEqual(command.resolve(),op.CLI)
+            self.assertEqual(subprocess.run([str(command),"version"],env=environment,
+                                            text=True,capture_output=True).stdout.strip(),
+                             (op.ROOT/"VERSION").read_text().strip())
+            removed=subprocess.run([str(command),"uninstall"],env=environment,
+                                   text=True,capture_output=True)
+            self.assertEqual(removed.returncode,0,removed.stderr)
+            self.assertFalse(command.exists())
+            self.assertTrue((package/"asrt").is_file())
+
+    def test_doctor_checks_requirements_without_changing_the_system(self):
+        args=argparse.Namespace(target_profile=None,json_output=True)
+        output=io.StringIO()
+        with patch.object(op.sys,"platform","darwin"), \
+             patch.object(op.socket,"socket") as probe,contextlib.redirect_stdout(output):
+            self.assertEqual(op.doctor(args),0)
+        checks=json.loads(output.getvalue())
+        self.assertFalse(any(check["status"]=="FAIL" for check in checks))
+        probe.return_value.bind.assert_called_once_with(("127.0.0.1",8765))
 
     def test_control_tests_reject_options_that_do_not_apply(self):
         cases = [

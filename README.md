@@ -25,13 +25,20 @@ Install the command from the cloned or extracted package:
 Then prepare the standard test:
 
 ```sh
+asrt doctor
 asrt init
 ```
+
+Installation copies a self-contained versioned package under `~/.local/lib/asrt`
+and links `~/.local/bin/asrt` to it, so the extracted download can be moved or
+removed. Run `./asrt update` from a newer extracted package to update the command,
+or `asrt uninstall` to remove the command while keeping the installed package.
 
 You can use `./asrt init` without installing the command. Setup asks where to
 create the workspace, shows any file paths outside that workspace, and
 asks once before writing files. It then creates `RUNBOOK.md` with the prompts,
-commands, and cleanup step.
+commands, and cleanup step, plus `ENGAGEMENT-REPORT.json` for product, model,
+permission, sensor, run, test-case, and alert records.
 
 Setup keeps its authoritative cleanup record in a private `.asrt-state` folder
 beside the workspace. The copy inside the workspace is informational, so an

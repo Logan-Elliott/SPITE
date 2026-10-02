@@ -11,6 +11,15 @@ Install the command once:
 ./asrt install
 ```
 
+Check the host before creating anything:
+
+```sh
+asrt doctor
+```
+
+The check covers macOS, Python, zsh, package files, the target config, localhost
+port 8765, and optional packet capture. Fix each `FAIL` before continuing.
+
 Prepare a workspace:
 
 ```sh
@@ -23,6 +32,9 @@ that workspace, and asks once before creating files. Existing paths are skipped.
 
 When setup reports `READY`, open the generated `RUNBOOK.md`. Record the test
 start time now so setup events are not included in the test window.
+Fill in the target version, model, permission setting, and sensor configuration
+in `ENGAGEMENT-REPORT.json` before testing, then add each run and final test-case
+outcome as you proceed.
 
 Open the workspace in the target agent. Use a fresh conversation for each of
 these prompts:

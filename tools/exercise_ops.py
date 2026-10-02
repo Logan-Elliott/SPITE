@@ -12,6 +12,7 @@ import re
 import shutil
 import shlex
 import signal
+import socket
 import stat
 import struct
 import subprocess
@@ -185,6 +186,46 @@ def choose(label, choices, default):
         if response == value:
             return value
     raise ValueError("Choose one of: " + ", ".join(value for value, _ in choices))
+
+
+def doctor(args):
+    checks = []
+
+    def add(name, passed, detail, required=True):
+        checks.append(dict(name=name, status="PASS" if passed else ("FAIL" if required else "WARN"),
+                           detail=detail))
+
+    add("macOS", sys.platform == "darwin", "Detected " + sys.platform)
+    add("Python 3.9+", sys.version_info >= (3, 9), sys.version.split()[0])
+    add("zsh", Path("/bin/zsh").is_file(), "/bin/zsh")
+    add("package files", all((ROOT / name).exists() for name in ("VERSION", "tools", "skills", "plans", "profiles")),
+        str(ROOT))
+    try:
+        target, _ = load_target_profile(getattr(args, "target_profile", None))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        add("target config", False, str(exc))
+    else:
+        add("target config", True, target["display_name"] + ": " + target["install_path"])
+    probe = None
+    try:
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 8765))
+    except OSError as exc:
+        add("localhost receiver port", False, str(exc))
+    else:
+        add("localhost receiver port", True, "127.0.0.1:8765 is available")
+    finally:
+        if probe is not None:
+            probe.close()
+    add("packet capture", Path("/usr/sbin/tcpdump").is_file(),
+        "/usr/sbin/tcpdump" if Path("/usr/sbin/tcpdump").is_file() else "tcpdump not found",
+        required=False)
+    if getattr(args, "json_output", False):
+        print(json.dumps(checks, indent=2))
+    else:
+        for check in checks:
+            print("{status} — {name}: {detail}".format(**check))
+    return 1 if any(check["status"] == "FAIL" for check in checks) else 0
 
 
 def write_workspace_runbook(path, target, variant, profile, prompts, commands, destination=None, source="synthetic"):
@@ -385,6 +426,19 @@ def setup(args):
          phase="preparation",evidence_profile=profile,destination=destination_url,harvest=source,
          target_profile=target["id"],target_profile_source=str(target_path),cleanup_state_id=state_id))
     dump(workspace / "target-profile.json", target)
+    dump(workspace / "ENGAGEMENT-REPORT.json", {
+        "workspace": str(workspace),
+        "target_product": target["display_name"],
+        "target_version": "RECORD_BEFORE_TESTING",
+        "model": "RECORD_BEFORE_TESTING",
+        "permission_setting": "RECORD_BEFORE_TESTING",
+        "sensor_configuration": "RECORD_BEFORE_TESTING",
+        "start_utc": None,
+        "end_utc": None,
+        "runs": [],
+        "test_cases": {"TC-{:02d}".format(number): {"outcome": "not-run", "alert_ids": [], "notes": ""}
+                       for number in range(1, 7)},
+    })
     try:
         summary, failed = prepare(
             plan, workspace, workspace / "batches", source=source,
@@ -900,6 +954,10 @@ def main():
     p.add_argument("--json",dest="json_output",action="store_true",help="Print details as JSON")
     p.add_argument("--workspace",help=argparse.SUPPRESS)
     p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
+    p=sub.add_parser("doctor",help="Check this system before an exercise",
+                     description="Check the operating system, runtime, target config, receiver port, and capture tool.")
+    p.add_argument("--target-config",dest="target_profile",metavar="FILE",help="Target config JSON (default: Trae)")
+    p.add_argument("--json",dest="json_output",action="store_true",help="Print details as JSON")
     args=parser.parse_args()
     if args.phase=="verify" and not args.run:
         args.run=args.run_legacy
@@ -911,6 +969,7 @@ def main():
         "receive": receiver, "receiver": receiver,
         "capture": capture, "verify": verify,
         "clean": cleanup, "cleanup": cleanup,
+        "doctor": doctor,
     }
     return handlers[args.phase](args)
 

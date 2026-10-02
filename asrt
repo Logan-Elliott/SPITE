@@ -14,7 +14,10 @@ Usage:
   asrt verify [options]     Verify saved exercise evidence
   asrt capture [options]    Capture loopback traffic for a PCAP lab run
   asrt clean [options]      Remove unchanged files created by setup
-  asrt install              Install the command in ~/.local/bin
+  asrt doctor               Check this system before an exercise
+  asrt install              Install this package in ~/.local
+  asrt update               Update the command from this package
+  asrt uninstall            Remove the installed command
   asrt version              Print the installed version
   asrt help                 Show this help
 
@@ -33,26 +36,58 @@ case "$command_name" in
   verify) phase=verify ;;
   capture) phase=capture ;;
   clean) phase=clean ;;
-  install)
+  doctor) phase=doctor ;;
+  install|update)
     bin_dir="${ASRT_BIN_DIR:-$HOME/.local/bin}"
+    lib_dir="${ASRT_LIB_DIR:-$HOME/.local/lib/asrt}"
+    version="$(<"$package_root/VERSION")"
+    install_root="$lib_dir/$version"
     target="$bin_dir/asrt"
-    mkdir -p "$bin_dir"
+    mkdir -p "$bin_dir" "$lib_dir"
+    if [[ ! -d "$install_root" ]]; then
+      staging="$lib_dir/.install-$version-$$"
+      mkdir "$staging"
+      for item in asrt VERSION macos tools skills variants profiles plans; do
+        cp -R "$package_root/$item" "$staging/$item"
+      done
+      mv "$staging" "$install_root"
+    fi
     if [[ -e "$target" || -L "$target" ]]; then
-      if [[ "${target:A}" == "$script_path" ]]; then
+      if [[ "${target:A}" == "$install_root/asrt" ]]; then
         print "Already installed: $target"
         exit 0
       fi
-      print -u2 "Refusing to replace existing path: $target"
-      exit 1
+      if [[ -L "$target" && "${target:A}" == "$lib_dir"/*/asrt ]]; then
+        ln -sfn "$install_root/asrt" "$target"
+        print "Updated: $target -> $install_root/asrt"
+      else
+        print -u2 "Refusing to replace existing path: $target"
+        exit 1
+      fi
+    else
+      ln -s "$install_root/asrt" "$target"
+      print "Installed: $target -> $install_root/asrt"
     fi
-    ln -s "$script_path" "$target"
-    print "Installed: $target"
     if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
       print "Add this line to your shell configuration, then open a new terminal:"
       print "  export PATH=\"$bin_dir:\$PATH\""
     else
       print "Run: asrt init"
     fi
+    exit 0
+    ;;
+  uninstall)
+    bin_dir="${ASRT_BIN_DIR:-$HOME/.local/bin}"
+    lib_dir="${ASRT_LIB_DIR:-$HOME/.local/lib/asrt}"
+    target="$bin_dir/asrt"
+    if [[ ! -L "$target" || "${target:A}" != "$lib_dir"/*/asrt ]]; then
+      print -u2 "No ASRT-managed command found at: $target"
+      exit 1
+    fi
+    installed_root="${target:A:h}"
+    unlink "$target"
+    print "Removed command: $target"
+    print "Saved package kept at: $installed_root"
     exit 0
     ;;
   version)
