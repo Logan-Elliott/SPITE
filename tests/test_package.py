@@ -20,9 +20,9 @@ class CombinedSetupTests(unittest.TestCase):
             "~/.git-credentials",
             "~/.aws/credentials",
             "~/.config/gcloud/application_default_credentials.json",
-            "~/Library/Application Support/Google/Chrome/PurpleTeam/Login Data",
-            "~/Library/Application Support/Firefox/Profiles/purple-team/logins.json",
-            "~/Library/Application Support/Trae/User/globalStorage/purple-team/session-secret",
+            "<chrome-profile>/Login Data",
+            "<firefox-profile>/logins.json",
+            "<trae-storage>/state.vscdb",
             "<workspace>/config/secrets.json",
         ]})
 

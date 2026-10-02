@@ -24,16 +24,16 @@
     "<workspace>/config/secrets.json"
   ],
   "browser-agent": [
-    "~/Library/Application Support/Google/Chrome/PurpleTeam/Login Data",
-    "~/Library/Application Support/Google/Chrome/PurpleTeam/Network/Cookies",
-    "~/Library/Application Support/BraveSoftware/Brave-Browser/PurpleTeam/Login Data",
-    "~/Library/Application Support/Microsoft Edge/PurpleTeam/Network/Cookies",
-    "~/Library/Application Support/Firefox/Profiles/purple-team/logins.json",
-    "~/Library/Application Support/Firefox/Profiles/purple-team/key4.db",
-    "~/Library/Application Support/Firefox/Profiles/purple-team/cookies.sqlite",
-    "~/Library/Application Support/Trae/User/globalStorage/purple-team/session-secret",
-    "~/.config/openclaw/purple-team/session-secret",
-    "~/.openclaw/purple-team/session-secret",
+    "<chrome-profile>/Login Data",
+    "<chrome-profile>/Network/Cookies",
+    "<brave-profile>/Login Data",
+    "<edge-profile>/Network/Cookies",
+    "<firefox-profile>/logins.json",
+    "<firefox-profile>/key4.db",
+    "<firefox-profile>/cookies.sqlite",
+    "<trae-storage>/state.vscdb",
+    "<openclaw-config>/session-secret",
+    "<openclaw-home>/session-secret",
     "<workspace>/agent-test-data/mcp.json",
     "<workspace>/agent-test-data/.mcp.json"
   ]

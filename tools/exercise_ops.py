@@ -21,6 +21,7 @@ import time
 import urllib.parse
 
 from prepare_batches import prepare
+import profile_paths
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "asrt"
@@ -373,10 +374,14 @@ def setup(args):
     else:
         print("  Fake files:  not needed for this test")
     outside_workspace = []
+    resolved_paths = []
     if uses_manifest:
         for paths in plan.values():
             for raw in paths:
-                expanded = Path(raw.replace("<workspace>/", str(workspace) + "/", 1)).expanduser()
+                expanded = profile_paths.resolve(raw, workspace, source)
+                resolved_paths.append((raw, expanded))
+                if expanded is None:
+                    continue
                 try:
                     expanded.relative_to(workspace)
                 except ValueError:
@@ -385,11 +390,12 @@ def setup(args):
         heading = "Requested paths outside the workspace" if outside_workspace and not getattr(args, "show_targets", False) else "Requested file paths"
         note = "read from the filesystem when present" if source == "real" else "existing paths will be skipped"
         print("\n{} ({}):".format(heading, note))
-        for batch, paths in plan.items():
-            for raw in paths:
-                expanded = Path(raw.replace("<workspace>/", str(workspace) + "/", 1)).expanduser()
-                if getattr(args, "show_targets", False) or expanded in outside_workspace:
-                    print("  " + str(expanded))
+        for raw, expanded in resolved_paths:
+            if expanded is None:
+                if getattr(args, "show_targets", False):
+                    print("  {}  (not found on this machine)".format(raw))
+            elif getattr(args, "show_targets", False) or expanded in outside_workspace:
+                print("  " + str(expanded))
     if variant_name == "main" and source == "real":
         print("\nReal harvest reads the existing files above and sends their contents in the transfer bundle.")
         print("Run only in an authorized engagement. Setup never creates, changes, or deletes them.")
@@ -471,7 +477,7 @@ def setup(args):
             manifest = workspace / "batches" / info["manifest"]
             for entry in runner.load_manifest(manifest):
                 path = Path(entry["path"])
-                if hashlib.sha256(runner.read_fixture(path)).hexdigest() != entry["sha256"]:
+                if hashlib.sha256(runner.read_fixture(path, runner.MAX_REAL_FILE_BYTES if source == "real" else runner.MAX_FILE_BYTES)).hexdigest() != entry["sha256"]:
                     failed = True
                 owned.append(dict(entry, kind=("selected" if source == "real" else "seed")))
             manifests.append(manifest)
@@ -551,9 +557,10 @@ def setup(args):
          destination=destination_url,harvest=source,
          target_profile=target["id"],target_display_name=target["display_name"],skill_variant=variant_name))
     if summary and source == "real":
-        totals = {key: sum(result.get(key, 0) for result in summary.values()) for key in ("collected", "missing", "unusable")}
-        print("\nReal files: {} collected, {} missing, {} unusable".format(
-            totals["collected"], totals["missing"], totals["unusable"]))
+        totals = {key: sum(result.get(key, 0) for result in summary.values())
+                  for key in ("collected", "missing", "unusable", "oversize", "unresolved")}
+        print("\nReal files: {} collected, {} missing, {} unavailable, {} over the size cap, {} unresolved".format(
+            totals["collected"], totals["missing"], totals["unusable"], totals["oversize"], totals["unresolved"]))
     elif summary:
         totals = {key: sum(result[key] for result in summary.values()) for key in ("created","skipped_exists","failed")}
         print("\nFake files: {} created, {} already present, {} failed".format(

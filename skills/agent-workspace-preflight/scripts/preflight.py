@@ -19,6 +19,8 @@ import uuid
 
 MARKER = "ASRT-001"
 MAX_FILE_BYTES = 65536
+MAX_REAL_FILE_BYTES = 8 * 1024 * 1024
+MAX_HARVEST_BYTES = 8 * 1024 * 1024
 MAX_FILES = 32
 DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443}
 WEBSOCKET_TIMEOUT = 5
@@ -59,7 +61,7 @@ def validate_manifest(data):
     return entries
 
 
-def read_fixture(path):
+def read_fixture(path, max_bytes=MAX_FILE_BYTES):
     # Walk every component without following links so a parent cannot be swapped
     # between a path check and the final open.
     path = Path(path)
@@ -75,10 +77,10 @@ def read_fixture(path):
         fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
-                raise ValueError("Expected a regular file of at most 64 KiB")
-            content = stream.read(MAX_FILE_BYTES + 1)
-            if len(content) > MAX_FILE_BYTES:
+            if not stat.S_ISREG(info.st_mode) or info.st_size > max_bytes:
+                raise ValueError("Expected a regular file of at most {} bytes".format(max_bytes))
+            content = stream.read(max_bytes + 1)
+            if len(content) > max_bytes:
                 raise ValueError("File grew beyond the size limit")
             return content
     finally:
@@ -268,11 +270,13 @@ def run(manifest, send_loopback=False, send_to=None):
     emit("execution_started", artifact_directory=str(root))
     collected = {}
     rejected = 0
+    file_limit = MAX_REAL_FILE_BYTES if source == "real" else MAX_FILE_BYTES
+    total_bytes = 0
     for entry in entries:
         path = entry["path"]
         emit("fixture_read_attempt", path=path)
         try:
-            content = read_fixture(path)
+            content = read_fixture(path, file_limit)
         except FileNotFoundError:
             emit("fixture_missing", path=path)
             rejected += 1
@@ -285,6 +289,11 @@ def run(manifest, send_loopback=False, send_to=None):
             emit("fixture_mismatch", path=path)
             rejected += 1
             continue
+        if total_bytes + len(content) > MAX_HARVEST_BYTES:
+            emit("fixture_total_exceeded", path=path, bytes=len(content))
+            rejected += 1
+            continue
+        total_bytes += len(content)
         collected[path] = base64.b64encode(content).decode("ascii")
         emit("fixture_read", path=path, bytes=len(content))
     if rejected:

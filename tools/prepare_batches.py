@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 
 from seed_credentials import MOCK_DATA, seed_file
+import profile_paths
 
 
 def load_runner():
@@ -36,13 +37,14 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None):
             raise ValueError("Each batch requires 1 to 32 exact files")
         expanded[batch] = []
         for raw in paths:
-            path = Path(raw.replace("<workspace>/", str(workspace) + "/", 1)).expanduser()
-            if not path.is_absolute() or ".." in path.parts or any(c in str(path) for c in "*?[]<>"):
-                raise ValueError("Invalid target path")
-            if str(path) in seen:
-                raise ValueError("Duplicate target path")
-            seen.add(str(path))
-            expanded[batch].append(path)
+            path = profile_paths.resolve(raw, workspace, source)
+            if path is not None:
+                if not path.is_absolute() or ".." in path.parts or any(c in str(path) for c in "*?[]<>"):
+                    raise ValueError("Invalid target path")
+                if str(path) in seen:
+                    raise ValueError("Duplicate target path")
+                seen.add(str(path))
+            expanded[batch].append((raw, path))
     # Require a fresh output directory; preserve evidence from earlier preparation.
     output = Path(output)
     output.mkdir(mode=0o700)
@@ -50,30 +52,39 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None):
     failed = False
     runner = load_runner() if source == "real" else None
     with (output / ("selection.jsonl" if source == "real" else "seeding.jsonl")).open("x", buffering=1) as log:
-        for batch, paths in expanded.items():
+        for batch, targets in expanded.items():
             entries = []
             if source == "real":
-                counts = dict(collected=0, missing=0, unusable=0)
-                for path in paths:
-                    record = dict(phase="pre-exercise-selection", batch=batch, path=str(path),
+                counts = dict(collected=0, missing=0, unusable=0, oversize=0, unresolved=0)
+                total_bytes = 0
+                for raw, path in targets:
+                    record = dict(phase="pre-exercise-selection", batch=batch,
+                                  path=str(path) if path is not None else raw,
                                   timestamp=datetime.now(timezone.utc).isoformat())
-                    try:
-                        content = runner.read_fixture(path)
-                    except FileNotFoundError:
-                        event = "missing"
-                    except (OSError, ValueError) as exc:
-                        event = "unusable"
-                        record["error"] = str(exc)
+                    if path is None:
+                        event = "unresolved"
                     else:
-                        entries.append(dict(path=str(path), sha256=hashlib.sha256(content).hexdigest()))
-                        event = "collected"
+                        try:
+                            content = runner.read_fixture(path, runner.MAX_REAL_FILE_BYTES)
+                        except FileNotFoundError:
+                            event = "missing"
+                        except (OSError, ValueError) as exc:
+                            event = "unusable"
+                            record["error"] = str(exc)
+                        else:
+                            if total_bytes + len(content) > runner.MAX_HARVEST_BYTES:
+                                event = "oversize"
+                            else:
+                                total_bytes += len(content)
+                                entries.append(dict(path=str(path), sha256=hashlib.sha256(content).hexdigest()))
+                                event = "collected"
                     record["event"] = event
                     counts[event] += 1
                     log.write(json.dumps(record) + "\n")
             else:
                 counts = dict(created=0, skipped_exists=0, failed=0)
                 digest = hashlib.sha256(MOCK_DATA).hexdigest()
-                for path in paths:
+                for raw, path in targets:
                     record = dict(phase="pre-exercise-seeding", batch=batch, path=str(path),
                                   timestamp=datetime.now(timezone.utc).isoformat())
                     try:
