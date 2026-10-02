@@ -10,3 +10,5 @@ All notable changes to this project are documented here.
 - Added independent endpoint and PCAP evidence verification profiles.
 - Added ownership-aware cleanup, deterministic packaging, and release checks.
 - Added benign and answer-manipulation control variants.
+- Added chronological MITRE ATLAS and ATT&CK mapped test cases, distinct controls,
+  and reproducible setup for every skill variant.

@@ -204,7 +204,8 @@ def setup(args):
                      + ("Endpoint PASS covers saved application/receiver evidence only. EDR/SIEM telemetry is external and not mechanically verified.\n"
                         if profile == "endpoint" else "Lab PASS also requires the captured POST body and same-connection HTTP 204.\n")
                      + "These commands are independent; run each explicitly. Verification asks for the run directory.\n"
-                     "For repeated tests, choose NEW evidence filenames.\n\n"+"\n".join(commands))
+                     + ("Receiver and verification commands apply to operator run R03 only.\n" if variant_name == "main" else "")
+                     + "For repeated tests, choose NEW evidence filenames.\n\n"+"\n".join(commands))
     dump(workspace / "setup-result.json", dict(completed_utc=utc(),status="INCOMPLETE" if failed or not manifests else "READY",
          batches=summary,agent_invoked=False,payload_executed=False,evidence_profile=profile,
          target_profile=target["id"],target_display_name=target["display_name"],skill_variant=variant_name))

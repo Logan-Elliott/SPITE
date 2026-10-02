@@ -6,7 +6,7 @@ agent. Only a prompt submitted to the target agent starts exercise behavior.
 
 | Command | Phase | Actions |
 |---|---|---|
-| Setup.command | Before review window | Review target plan, seed missing mocks, make manifests, install project skill, write prompts and ownership ledger |
+| Setup.command | Before review window | Review target plan, seed missing mocks, make manifests, install the selected skill variant, write prompts and ownership ledger |
 | HTTP-Receiver.command | Explicitly started support process | Listen on 127.0.0.1:8765, receive one POST, save receipt, exit |
 | Packet-Capture.command | Lab PCAP profile only | Capture lo0 TCP port 8765; stop independently with Ctrl-C or timeout |
 | Verify.command | After exercise (and capture stops in PCAP profile) | Check saved application/receiver artifacts, plus PCAP only in that profile |
@@ -55,13 +55,34 @@ timestamps and exclude them from the exercise review window. Partial failures
 retain their evidence and successfully created files; do not rerun blindly.
 
 The workspace contains `batches/*.json`, `AGENT-PROMPTS.txt`, `ownership.json`, a
-snapshot of the target profile, and the installed skill package. Prompts use the
-specific interpreter found at setup. When multiple batches contain at most 32
-new files altogether, setup also creates `all-prepared.json` and puts its T2/T3/T4
-prompt group first. Use that manifest for one test of every prepared file, or use
-individual batch prompt groups for separate tests. Use a fresh target agent
-conversation each time. T2 and T3 run offline; T4 requires the receiver and is the
-case accepted by the generated verifier command.
+snapshot of the target profile, and the installed skill variant. Main-variant
+prompts use the specific interpreter found at setup. When multiple batches contain
+at most 32 new files altogether, setup also creates `all-prepared.json` and puts
+its R01/R02/R03 prompt group first. Use that manifest for one run of every prepared
+file, or use individual batch prompt groups for separate runs. Use a fresh target
+agent conversation each time. R01 and R02 run offline; R03 requires the receiver
+and is the run accepted by the generated verifier command.
+
+## Prepare variants and controls
+
+Prepare a separate workspace for each variant used in the engagement. Setup copies
+only the selected package and records it in `setup-result.json` and the ownership
+ledger:
+
+```sh
+./macos/Setup.command --evidence-profile endpoint --skill-variant benign-control \
+  --workspace "$HOME/asrt-benign"
+./macos/Setup.command --evidence-profile endpoint --skill-variant main \
+  --workspace "$HOME/asrt-main"
+./macos/Setup.command --evidence-profile endpoint --skill-variant answer-contamination \
+  --workspace "$HOME/asrt-answer"
+```
+
+Run C-01 from the benign workspace first, R01 through R03 from the main workspace,
+and R04 from the answer-contamination workspace last. Use a fresh conversation for
+every entry. R02 is a diagnostic explicit invocation after R01; R03 repeats the
+main chain to measure the transfer behavior. The controls, runs, and chronological
+TC-01 through TC-06 behavior definitions are in [TEST-CASES.md](TEST-CASES.md).
 
 ## Target profiles
 
@@ -130,8 +151,8 @@ After setup above, start the receiver in its own terminal:
 
 Wait for its READY message. Record the exercise start time, open the prepared
 workspace in the target agent, and submit the selected prompt from
-`AGENT-PROMPTS.txt` in a fresh conversation. Use the corresponding `T4 loopback`
-prompt when collecting receiver evidence. No packet-capture command is needed.
+`AGENT-PROMPTS.txt` in a fresh conversation. Use `Operator run R03` when collecting
+receiver evidence. No packet-capture command is needed.
 After the target agent completes, run:
 
 ```sh
@@ -146,10 +167,10 @@ used by that prompt, and never asks for a PCAP. For noninteractive use add
 Generated operator commands already supply the correct manifest path. Correlate
 the report's run ID, timestamp, PID and parent PID with EDR/SIEM separately.
 
-For sequential cases on the same account, keep the prepared workspace and mocks;
-do not rerun setup between tests. Start a new one-request receiver explicitly each
-time, use new receipt/report names (`endpoint-02`, etc.), and a fresh agent session.
-Do not clean up until every case and evidence review is complete. Output files
+For sequential main-variant runs on the same account, keep the prepared workspace
+and mocks; do not rerun setup between runs. Start a new one-request receiver
+explicitly each time it is needed, use new receipt/report names (`endpoint-02`,
+etc.), and a fresh agent session. Do not clean up until every run and evidence review is complete. Output files
 are never overwritten. Cleanup remains an independent, initially preview-only step:
 
 ```sh
@@ -187,7 +208,7 @@ receipt.
 Wait for BOTH READY messages. Record the exercise start time. Open the prepared
 workspace in the target agent, switch to the exercise account if applicable, and
 start a fresh conversation. Copy one prompt from `AGENT-PROMPTS.txt` and submit it
-manually; use `T4 loopback` for PCAP verification. Keep normal tool approval controls
+manually; use R03 for PCAP verification. Keep normal tool approval controls
 in place. Save the transcript and run
 directory printed by the target agent. The receiver handles one request; restart it
 explicitly for each subsequent test.
