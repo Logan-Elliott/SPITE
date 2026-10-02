@@ -34,6 +34,20 @@ validates the archive's CRC and `PACKAGE-HASHES.json` contents.
 Tests use temporary files and mocked network connections. They never
 install a skill into an actual agent product or collect real credential data.
 
+## Dedicated VM check
+
+On 2026-10-02, the platform-neutral collection and transfer path was also run on
+a dedicated Ubuntu 24.04 VM with Python 3.12.3. The test created a synthetic AWS
+credential at its normal host path, selected it with `--harvest real`, staged the
+bundle, sent it through the real localhost HTTP receiver, and verified the saved
+receipt. All nine artifact and receipt checks passed and the report status was
+`VERIFIED`. The synthetic credential and its newly created parent directory were
+removed after verification.
+
+This VM check used a real socket and host path. It did not run a coding agent,
+macOS packet capture, or endpoint detection product, so it does not replace the
+engagement checks below.
+
 ## macOS harness validation
 
 Setup, receiving, capture, verification, and cleanup have each been exercised on
