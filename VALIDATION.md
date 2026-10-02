@@ -1,79 +1,57 @@
-# Current revision: pre-seeded macOS mock files
+# Validation status
 
-## Endpoint evidence profile
+This document separates repository checks from product and detection validation.
 
-Testing is confined to the repository
-and temporary synthetic test directories. No real Trae payload was invoked;
-existing runner unit tests use temporary mock files and mocked network connections.
+## Automated checks
 
-The complete suite passes 28 tests on the Linux development host. New regression
-coverage verifies endpoint setup emits no capture/sudo/tcpdump command, records its
-profile, still generates the receiver, and supplies an explicit no-PCAP Verify
-command. Endpoint verification passes with valid synthetic application evidence
-and no PCAP or PCAP prompt; missing artifacts, bad receipt run IDs, wrong hashes,
-wrong paths, invalid manifests and failed HTTP acknowledgements fail. Endpoint
-setup, receiver and verifier tests reject subprocess execution. Existing PCAP,
-ownership and cleanup tests remain passing, and explicit PCAP verification still
-requires packet evidence. Profile reports list external EDR/SIEM checks as not
-mechanically verified.
+The current suite covers:
 
-The package is rebuilt with endpoint and lab operator instructions and checked for
-ZIP CRC integrity and agreement with every embedded PACKAGE-HASHES.json entry.
-Native execution on the specified managed macOS version, Trae discovery/tool
-permissions and external EDR/SIEM detections still require target-side validation.
+- exact-path mock seeding with no-overwrite and parent-symlink protection;
+- manifest validation, file limits, hashes, and changed-file rejection;
+- offline staging and fixed loopback transfer behavior;
+- target-profile validation and custom project installation paths;
+- setup phase isolation and ownership-ledger cleanup;
+- endpoint verification without packet capture;
+- PCAP verification, TCP segmentation, retransmission, and empty captures;
+- package construction and embedded file-hash verification.
 
-## Independent macOS operator package — September 13, 2026
+Run the complete repository gate with:
 
-The operator package separates setup, HTTP receiving, packet capture, artifact
-verification and explicit cleanup. The operator CLI never invokes the payload.
-Its tests cover setup ownership and phase isolation, changed-file cleanup,
-combined manifests, TCP segmentation/retransmission, real runner artifact
-verification and the empty-PCAP failure case. The packaged setup/cleanup launchers
-passed in an isolated macOS workspace. Receiver and capture startup/timeouts were
-checked independently without executing the payload. The packaged verifier also
-returned PASS against the saved 29-file, 7,828-byte transfer and 14-packet capture
-from run `e566aac6-6454-407b-9342-2f4385df667b`.
+```sh
+python3 tools/release_check.py
+```
 
-Finder quarantine handling and managed-device execution controls have not been
-validated; the ZIP is unsigned. Operator verification does not validate EDR alerts.
+The release gate runs the unit suite, parses every Python and JSON source, checks
+the macOS launcher syntax when `zsh` is available, builds the operator archive, and
+validates the archive's CRC and `PACKAGE-HASHES.json` contents.
 
-## macOS lab test-path fix — September 13, 2026
+Tests use temporary synthetic files and mocked network connections. They never
+install a skill into an actual agent product or collect existing credential data.
 
-The first macOS lab run on Python 3.14.3 reported two failures and three errors.
-Preflight tests used `/var/folders/...` paths whose parent is a symlink; the runner
-correctly rejected those paths before reaching the intended test behavior.
-The exact failure pattern was reproduced on Linux using a symlinked TMPDIR.
-The test helper now resolves its temporary root before registering fixtures.
-All 13 tests pass with both ordinary and symlinked temporary roots on Linux,
-including a new regression test. Runtime symlink rejection remains unchanged.
-Confirmation of the corrected suite on the macOS lab host is still pending.
+## macOS harness validation
 
-The separate seeding tool adds six tests covering missing-file creation and
-permissions, existing content/metadata preservation, directories and dangling
-symlinks, symlinked parents, a concurrent creator, and invalid paths. All 12 tests
-pass on the Linux development host. Seeding remains outside the skill workflow.
+The independent setup, receiver, capture, verification, and cleanup phases have
+been exercised on macOS. The verifier has passed against a saved multi-file
+loopback transfer and classic DLT_NULL packet capture.
 
-Six unit tests passed on the Linux development host: unchanged pre-seeded files,
-missing files without creation, changed files excluded from staging/transfer,
-symlink rejection, mocked loopback transfer, and transfer failure reporting.
-Tests seed their isolated inputs before invoking the runner; the runner does not
-seed them. Existing input content and modification timestamps are checked.
-Actual macOS/Trae behavior and detector alerts remain untested. The actual socket
-exchange below was for the earlier runtime-seeding revision, not this revision.
+macOS temporary paths can resolve through `/var` to `/private/var`. Tests and
+operator guidance therefore use physical paths while runtime symlink rejection
+remains enabled.
 
-# Earlier revision validation — September 8, 2026
+The operator ZIP is unsigned and not notarized. Finder quarantine behavior and
+organization-specific execution controls depend on the target environment.
 
-- Three unit tests passed: offline evidence, fixed loopback destination and payload,
-  and transfer failure without false completion.
-- Main skill frontmatter passed the skill-creator validator.
-- Actual sender/collector exchange passed: HTTP 204, collector received synthetic
-  data, sender exited 0, and the one-request collector exited 0.
-- Successful run ID: `005f340b-8047-42ab-b7f0-9ab6d4ef1b19`.
-- Evidence directory on this host: `/tmp/pt-trae-xw1f52cq`.
-- Initial sandboxed socket attempt was blocked and correctly produced
-  `transfer_failed` with exit 1. Evidence: `/tmp/pt-trae-xjypnxds`.
-  Local socket verification was then completed with approved escalation.
+## Engagement validation still required
 
-These were harness tests launched from the terminal. No Trae installation,
-skill-loading behavior, model response, EDR alert, or SIEM correlation was tested.
-The included detection guidance remains a set of hypotheses for endpoint testing.
+The repository cannot establish the following without a real target run:
+
+- whether the selected product version discovers the configured skill path;
+- whether it loads the skill body and supporting script;
+- whether the model selects the skill for an implicit request;
+- whether tool permission controls allow or prevent execution;
+- whether process, file, and loopback telemetry is collected by the endpoint stack;
+- whether the expected detections alert and correlate the full behavior chain.
+
+Record those results per product version, model, operating system, permission mode,
+sensor configuration, and test case. A generated PASS report proves only the saved
+evidence covered by its selected evidence profile.
