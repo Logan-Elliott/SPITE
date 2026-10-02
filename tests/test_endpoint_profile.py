@@ -152,8 +152,7 @@ class EndpointProfileTests(unittest.TestCase):
         existing.write_text("preserve")
         plan.write_text(json.dumps({"sample":[str(existing),"<workspace>/.env"]}))
         workspace=self.root/"workspace"
-        args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
-                                evidence_profile="endpoint",allow_outside_workspace=True)
+        args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,evidence_profile="endpoint")
         with patch.object(op.os,"geteuid",return_value=501), \
              patch.object(op.subprocess,"Popen",side_effect=AssertionError("No sudo/tcpdump/processes")), \
              contextlib.redirect_stdout(io.StringIO()):
@@ -260,8 +259,7 @@ class EndpointProfileTests(unittest.TestCase):
         workspace=self.root/"workspace"
         destination="http://127.0.0.1:8765/asrt"
         args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
-                                evidence_profile="endpoint",destination=destination,
-                                allow_outside_workspace=True)
+                                evidence_profile="endpoint",destination=destination)
         with patch.object(op.os,"geteuid",return_value=501), \
              patch.object(op.subprocess,"Popen",side_effect=AssertionError("No sudo/tcpdump/processes")), \
              contextlib.redirect_stdout(io.StringIO()):

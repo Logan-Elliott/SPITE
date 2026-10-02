@@ -35,8 +35,7 @@ class OperatorTests(unittest.TestCase):
             existing=root/"existing";existing.write_text("preserve")
             plan=root/"plan.json"
             plan.write_text(json.dumps({"sample":[str(existing),"<workspace>/.env","<workspace>/other"]}))
-            args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
-                                    allow_outside_workspace=True)
+            args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True)
             with patch.object(op.subprocess,"Popen",side_effect=AssertionError("Setup must not launch a process")), \
                  patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.setup(args),0)

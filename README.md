@@ -3,8 +3,8 @@
 A macOS purple team tool for testing whether a coding agent discovers, trusts,
 and runs a malicious project skill.
 
-Setup can either create synthetic fake credential files inside the new workspace
-or select existing real files, and the bundle can be sent to a receiver. By default the receiver is on
+Setup can either create synthetic fake credential files or select existing real
+files, and the bundle can be sent to a receiver. By default the receiver is on
 `127.0.0.1`. You can also give setup a destination URL (`http`, `https`, `ws`,
 or `wss`) and the same bundle is sent there. Synthetic mode never reads existing
 files; real mode reads only the exact paths in the file list.
@@ -44,8 +44,7 @@ Follow that runbook:
    the agent.
 5. Save the transcript and run the cleanup command.
 
-For scripts, provide the workspace and skip the confirmation. The standard file
-list stays inside that workspace:
+For scripts, provide the workspace and skip the confirmation:
 
 ```sh
 asrt init --workspace "$HOME/agent-skill-exercise" --yes
@@ -104,19 +103,11 @@ The included [Trae config](profiles/trae.json) installs the skill under Trae's
 project skill path. Confirm that path against the product version used in the
 engagement.
 
-The standard test uses eight representative synthetic files inside the workspace.
-To put synthetic files at credential-shaped macOS home paths, use the separate
-host-path list and acknowledge the paths outside the workspace:
+The standard test uses eight representative synthetic files. To use one group
+from the larger macOS list:
 
 ```sh
-asrt init --file-list plans/macos-host-paths.json --allow-outside-workspace
-```
-
-To use one group from the larger macOS list:
-
-```sh
-asrt init --file-list plans/macos-expanded.json --group developer \
-  --allow-outside-workspace
+asrt init --file-list plans/macos-expanded.json --group developer
 ```
 
 Available groups are `developer`, `cloud-container`, and `browser-agent`.
@@ -127,8 +118,7 @@ By default setup creates synthetic files. To instead read existing files from
 the file list and include their contents in the bundle:
 
 ```sh
-asrt init --harvest real --file-list /absolute/path/to/files.json \
-  --allow-outside-workspace
+asrt init --harvest real
 ```
 
 Real harvest reads only the exact paths in the file list, skips missing,
@@ -161,10 +151,9 @@ destination is `127.0.0.1:8765`; with `--destination` it sends only the same
 manifest-verified bundle to the URL you provide, over one connection with no
 redirects or proxy settings, and `https`/`wss` verify certificates.
 
-The standard synthetic setup stays inside its new workspace. A file list that
-uses paths elsewhere requires `--allow-outside-workspace`; those files can affect
-applications, so use that option only in a disposable project or dedicated test
-account. Real harvest reads only the exact existing files in the
+Synthetic setup skips existing paths without reading or changing them, but the
+files it creates can still affect applications, so use a disposable project or
+dedicated test account. Real harvest reads only the exact existing files in the
 file list, never changes or deletes them, and includes their contents in the
 bundle. Run real harvest only inside an authorized engagement.
 

@@ -146,18 +146,6 @@ class CombinedSetupTests(unittest.TestCase):
         self.assertIn("Capture TCP port 8765",result.stdout)
         self.assertNotIn("sudo",result.stderr.lower())
 
-    def test_outside_workspace_paths_require_a_separate_acknowledgement(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory).resolve()
-            plan=root/"plan.json"
-            plan.write_text(json.dumps({"sample":[str(root/"outside")]}))
-            args=argparse.Namespace(plan=str(plan),workspace=str(root/"workspace"),apply=True,
-                                    evidence_profile="endpoint",allow_outside_workspace=False)
-            with patch.object(op.os,"geteuid",return_value=501), \
-                 contextlib.redirect_stdout(io.StringIO()), \
-                 self.assertRaisesRegex(ValueError,"--allow-outside-workspace"):
-                op.setup(args)
-
     def test_control_tests_reject_options_that_do_not_apply(self):
         cases = [
             dict(test_name="benign",pcap=True),

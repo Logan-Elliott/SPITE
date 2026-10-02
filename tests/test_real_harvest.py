@@ -96,8 +96,7 @@ class SetupRealTests(unittest.TestCase):
             plan.write_text(json.dumps({"sample": [str(real), "<workspace>/new/mock"]}))
             workspace = root / "workspace"
             args = argparse.Namespace(plan=str(plan), workspace=str(workspace), apply=True,
-                                      harvest="real", evidence_profile="endpoint",
-                                      allow_outside_workspace=True)
+                                      harvest="real", evidence_profile="endpoint")
             with patch.object(op.os, "geteuid", return_value=501), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.setup(args), 0)
             self.assertEqual(real.read_bytes(), b"REAL=1\n")

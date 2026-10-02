@@ -229,7 +229,6 @@ def setup(args):
         if getattr(args, "plan", None): incompatible.append("--file-list")
         if getattr(args, "group", None): incompatible.append("--group")
         if getattr(args, "show_targets", False): incompatible.append("--show-targets")
-        if getattr(args, "allow_outside_workspace", False): incompatible.append("--allow-outside-workspace")
         if incompatible:
             raise ValueError("{} cannot be used with the {} test".format(
                 ", ".join(incompatible), PUBLIC_TESTS.get(getattr(args, "test_name", None), variant_name)))
@@ -282,11 +281,6 @@ def setup(args):
                 expanded = Path(raw.replace("<workspace>/", str(workspace) + "/", 1)).expanduser()
                 if getattr(args, "show_targets", False) or expanded in outside_workspace:
                     print("  " + str(expanded))
-    if outside_workspace and not getattr(args, "allow_outside_workspace", False):
-        raise ValueError(
-            "This file list includes paths outside the workspace. Review them above, then rerun "
-            "with --allow-outside-workspace on a dedicated test account"
-        )
     if variant_name == "main" and source == "real":
         print("\nReal harvest reads the existing files above and sends their contents in the transfer bundle.")
         print("Run only in an authorized engagement. Setup never creates, changes, or deletes them.")
@@ -704,8 +698,6 @@ def main():
     p.add_argument("--destination",metavar="URL",
                    help="Send the bundle to an http, https, ws, or wss receiver URL instead of localhost")
     p.add_argument("--show-targets",action="store_true",help="List every requested file path")
-    p.add_argument("--allow-outside-workspace",action="store_true",
-                   help="Allow the reviewed file list to use paths outside the workspace")
     p.add_argument("-y","--yes",action="store_true",help="Create the reviewed workspace without asking")
     p.add_argument("--plan",dest="plan",help=argparse.SUPPRESS)
     p.add_argument("--target","--target-profile",dest="target_profile",help=argparse.SUPPRESS)
