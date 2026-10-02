@@ -7,7 +7,7 @@ import re
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
-SLUG="agent-skill-redteam-harness"
+SLUG="spite"
 
 if __name__=="__main__":
     version=(ROOT/"VERSION").read_text(encoding="utf-8").strip()
@@ -22,14 +22,14 @@ if __name__=="__main__":
         files.extend(p for p in (ROOT/folder).rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix!=".pyc")
     files.extend(ROOT/name for name in (
         "README.md","OPERATOR.md","TEST-CASES.md","RESEARCH.md","DETECTIONS.md","VALIDATION.md",
-        "CHANGELOG.md","CONTRIBUTING.md","CODE_OF_CONDUCT.md","SECURITY.md","LICENSE","VERSION","asrt"))
+        "CHANGELOG.md","CONTRIBUTING.md","CODE_OF_CONDUCT.md","SECURITY.md","LICENSE","VERSION","spite"))
     hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
     with zipfile.ZipFile(target,"w",compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(files):
             relative=path.relative_to(ROOT)
             info=zipfile.ZipInfo(package_root+"/"+str(relative))
             info.create_system=3
-            mode=0o100755 if path.name=="asrt" or path.suffix in (".command",".sh") else 0o100644
+            mode=0o100755 if path.name=="spite" or path.suffix in (".command",".sh") else 0o100644
             info.external_attr=mode<<16
             info.compress_type=zipfile.ZIP_DEFLATED
             archive.writestr(info,path.read_bytes())

@@ -34,9 +34,9 @@ class ResolveTests(EnvClean):
         workspace = Path("/tmp/ws")
         home = Path("/home/nobody")
         self.assertEqual(profile_paths.resolve("<chrome-profile>/Login Data", workspace, "synthetic", home=home),
-                         home / ".asrt-exercise/chrome/Login Data")
+                         home / ".spite-exercise/chrome/Login Data")
         self.assertEqual(profile_paths.resolve("<trae-storage>/state.vscdb", workspace, "synthetic", home=home),
-                         home / ".asrt-exercise/trae/state.vscdb")
+                         home / ".spite-exercise/trae/state.vscdb")
         self.assertEqual(profile_paths.resolve("<workspace>/config/secrets.json", workspace, "synthetic", home=home),
                          workspace / "config/secrets.json")
 
@@ -137,7 +137,7 @@ class PreparePlaceholderTests(EnvClean):
             self.assertFalse(failed)
             manifest = json.loads((root / "out/sample.json").read_text())
             self.assertEqual(manifest["files"][0]["path"],
-                             str(root / "home/.asrt-exercise/chrome/Login Data"))
+                             str(root / "home/.spite-exercise/chrome/Login Data"))
 
     def test_real_selects_discovered_profile_and_records_unresolved(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -93,7 +93,7 @@ class CombinedSetupTests(unittest.TestCase):
     def test_setup_installs_each_control_variant_and_generates_its_prompt(self):
         cases = {
             "benign-control": ("Benign control", "Do not run commands"),
-            "answer-contamination": ("Response manipulation test", "ASRT-002"),
+            "answer-contamination": ("Response manipulation test", "SPITE-002"),
         }
         for variant, (prompt_marker, skill_marker) in cases.items():
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as directory:
@@ -170,13 +170,13 @@ class CombinedSetupTests(unittest.TestCase):
     def test_install_copies_a_versioned_package_and_uninstall_keeps_it(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory).resolve()
-            environment=dict(os.environ,ASRT_BIN_DIR=str(root/"bin"),ASRT_LIB_DIR=str(root/"lib"))
+            environment=dict(os.environ,SPITE_BIN_DIR=str(root/"bin"),SPITE_LIB_DIR=str(root/"lib"))
             installed=subprocess.run([str(op.CLI),"install"],cwd=op.ROOT,env=environment,
                                      text=True,capture_output=True)
             self.assertEqual(installed.returncode,0,installed.stderr)
-            command=root/"bin/asrt"
+            command=root/"bin/spite"
             package=root/"lib"/(op.ROOT/"VERSION").read_text().strip()
-            self.assertEqual(command.resolve(),package/"asrt")
+            self.assertEqual(command.resolve(),package/"spite")
             self.assertNotEqual(command.resolve(),op.CLI)
             self.assertEqual(subprocess.run([str(command),"version"],env=environment,
                                             text=True,capture_output=True).stdout.strip(),
@@ -185,7 +185,7 @@ class CombinedSetupTests(unittest.TestCase):
                                    text=True,capture_output=True)
             self.assertEqual(removed.returncode,0,removed.stderr)
             self.assertFalse(command.exists())
-            self.assertTrue((package/"asrt").is_file())
+            self.assertTrue((package/"spite").is_file())
 
     def test_doctor_checks_requirements_without_changing_the_system(self):
         args=argparse.Namespace(target_profile=None,json_output=True)

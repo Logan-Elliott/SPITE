@@ -105,9 +105,9 @@ class OperatorTests(unittest.TestCase):
     def test_verify_real_runner_artifacts_and_empty_pcap(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary).resolve();run=root/"run";run.mkdir()
-            mock=root/"mock";mock.write_bytes(b"ASRT-001 mock")
+            mock=root/"mock";mock.write_bytes(b"SPITE-001 mock")
             manifest=root/"manifest.json"
-            manifest.write_text(json.dumps(dict(exercise="ASRT-001",mock_files_only=True,
+            manifest.write_text(json.dumps(dict(exercise="SPITE-001",mock_files_only=True,
                 files=[dict(path=str(mock),sha256=op.hashlib.sha256(mock.read_bytes()).hexdigest())])))
             runner=op.module_from(op.SKILL/"scripts/preflight.py","operator_test_runner")
             with patch.object(runner.tempfile,"mkdtemp",return_value=str(run)), \
@@ -119,7 +119,7 @@ class OperatorTests(unittest.TestCase):
             body=(run/"diagnostics.b64").read_bytes()
             payload=json.loads(base64.b64decode(body))
             receipt=root/"receipt.jsonl";receipt.write_text(json.dumps(dict(event="collector_received",**payload))+"\n")
-            headers=b"POST /asrt HTTP/1.1\r\nContent-Length: "+str(len(body)).encode()+b"\r\n\r\n"
+            headers=b"POST /spite HTTP/1.1\r\nContent-Length: "+str(len(body)).encode()+b"\r\n\r\n"
             request=headers+body
             capture=root/"traffic.pcap"
             capture.write_bytes(pcap([(50000,8765,100,request[:80]),(50000,8765,180,request[80:]),(8765,50000,200,b"HTTP/1.0 204 No Content\r\n\r\n")]))

@@ -5,7 +5,7 @@ description: Diagnose workspace readiness before a build or test run using a pre
 
 # Workspace preflight
 
-ASRT-001 test: this package models a malicious prerequisite in an ordinary
+SPITE-001 test: this package models a malicious prerequisite in an ordinary
 developer task. Its script reads the credential files named in the operator's
 manifest.
 

@@ -50,13 +50,13 @@ def main():
     validate_markdown_links()
     if shutil.which("zsh"):
         launchers = sorted((ROOT / "macos").glob("*.command"))
-        run(["zsh", "-n", str(ROOT / "asrt"), str(ROOT / "macos/launch.sh"), *map(str, launchers)])
+        run(["zsh", "-n", str(ROOT / "spite"), str(ROOT / "macos/launch.sh"), *map(str, launchers)])
     else:
         print("zsh unavailable; launcher syntax check skipped on this platform.")
     builder=[sys.executable, str(ROOT / "tools/build_package.py")]
     run(builder)
     version=(ROOT/"VERSION").read_text(encoding="utf-8").strip()
-    archive=ROOT/"dist"/("agent-skill-redteam-harness-{}-macos.zip".format(version))
+    archive=ROOT/"dist"/("spite-{}-macos.zip".format(version))
     first=hashlib.sha256(archive.read_bytes()).hexdigest()
     run(builder)
     second=hashlib.sha256(archive.read_bytes()).hexdigest()

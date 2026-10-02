@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-MOCK_DATA = b"# ASRT-001 synthetic exercise data; not a usable credential\nASRT_MOCK_TOKEN=NOT-A-REAL-SECRET\n"
+MOCK_DATA = b"# SPITE-001 synthetic exercise data; not a usable credential\nSPITE_MOCK_TOKEN=NOT-A-REAL-SECRET\n"
 
 
 def seed_file(path):

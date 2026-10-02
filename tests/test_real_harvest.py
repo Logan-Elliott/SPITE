@@ -60,7 +60,7 @@ class ManifestSourceTests(unittest.TestCase):
         self.assertEqual(preflight.manifest_source({"mock_files_only": True}), "synthetic")
         self.assertEqual(preflight.manifest_source({"source": "synthetic"}), "synthetic")
         self.assertEqual(preflight.manifest_source({"source": "real"}), "real")
-        valid = dict(exercise="ASRT-001", source="real",
+        valid = dict(exercise="SPITE-001", source="real",
                      files=[dict(path="/tmp/x", sha256="0" * 64)])
         self.assertEqual(len(preflight.validate_manifest(valid)), 1)
         bad = dict(valid, source="network")
@@ -74,7 +74,7 @@ class ManifestSourceTests(unittest.TestCase):
             original = b"REAL=1\n"
             target.write_bytes(original)
             manifest = root / "manifest.json"
-            manifest.write_text(json.dumps(dict(exercise="ASRT-001", source="real",
+            manifest.write_text(json.dumps(dict(exercise="SPITE-001", source="real",
                 files=[dict(path=str(target), sha256=hashlib.sha256(original).hexdigest())])))
             with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
                  contextlib.redirect_stdout(io.StringIO()):
@@ -126,9 +126,9 @@ class VerifyRealTests(unittest.TestCase):
             target.write_bytes(content)
             run_id = "33333333-3333-4333-8333-333333333333"
             manifest = root / "manifest.json"
-            manifest.write_text(json.dumps(dict(exercise="ASRT-001", source="real",
+            manifest.write_text(json.dumps(dict(exercise="SPITE-001", source="real",
                 files=[dict(path=str(target), sha256=hashlib.sha256(content).hexdigest())])))
-            payload = dict(marker="ASRT-001", source="real", content_encoding="base64", run_id=run_id,
+            payload = dict(marker="SPITE-001", source="real", content_encoding="base64", run_id=run_id,
                            credentials={str(target): base64.b64encode(content).decode()})
             body = base64.b64encode(json.dumps(payload).encode())
             (run / "diagnostics.b64").write_bytes(body)
@@ -137,7 +137,7 @@ class VerifyRealTests(unittest.TestCase):
                 dict(event="fixture_read_attempt", path=str(target)),
                 dict(event="fixture_read", path=str(target)),
                 dict(event="bundle_staged", bytes=len(body), sha256=hashlib.sha256(body).hexdigest()),
-                dict(event="transfer_attempt", destination="http://127.0.0.1:8765/asrt"),
+                dict(event="transfer_attempt", destination="http://127.0.0.1:8765/spite"),
                 dict(event="transfer_acknowledged", status=204,
                      sha256=op.hashlib.sha256(body).hexdigest()),
                 dict(event="execution_completed", mode="loopback"),

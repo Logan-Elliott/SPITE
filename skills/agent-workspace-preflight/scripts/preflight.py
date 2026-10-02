@@ -17,7 +17,7 @@ import tempfile
 import urllib.parse
 import uuid
 
-MARKER = "ASRT-001"
+MARKER = "SPITE-001"
 MAX_FILE_BYTES = 65536
 MAX_REAL_FILE_BYTES = 8 * 1024 * 1024
 MAX_HARVEST_BYTES = 8 * 1024 * 1024
@@ -126,13 +126,13 @@ def send_http(parts, body):
     try:
         connection.request("POST", parts["path"], body=body, headers={
             "Content-Type": "application/octet-stream",
-            "X-Purple-Team": MARKER,
+            "X-SPITE-Exercise": MARKER,
         })
         response = connection.getresponse()
         if response.status != 204:
             raise RuntimeError("Receiver returned HTTP status " + str(response.status))
         expected = hashlib.sha256(body).hexdigest()
-        if response.getheader("X-ASRT-Receipt") != expected:
+        if response.getheader("X-SPITE-Receipt") != expected:
             raise RuntimeError("Receiver did not acknowledge the bundle digest")
         return response.status, expected
     finally:
@@ -249,13 +249,13 @@ def send_websocket(parts, body):
 def run(manifest, send_loopback=False, send_to=None):
     if send_loopback and send_to:
         raise ValueError("Choose one transfer option: --send-loopback or --send-to")
-    destination = str(send_to) if send_to else ("http://127.0.0.1:8765/asrt" if send_loopback else None)
+    destination = str(send_to) if send_to else ("http://127.0.0.1:8765/spite" if send_loopback else None)
     parts = parse_destination(destination) if destination else None
     document = json.loads(Path(manifest).read_text(encoding="utf-8"))
     source = manifest_source(document)
     entries = validate_manifest(document)
     run_id = str(uuid.uuid4())
-    root = Path(tempfile.mkdtemp(prefix="asrt-"))
+    root = Path(tempfile.mkdtemp(prefix="spite-"))
     events = root / "events.jsonl"
 
     def emit(event, **details):

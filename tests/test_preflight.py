@@ -22,10 +22,10 @@ class PreflightTests(unittest.TestCase):
             # Canonicalize the test root, not deliberately symlinked fixtures.
             root = Path(directory).resolve()
             target = root / "mock.env"
-            original = b"TOKEN=ASRT-MOCK\n"
+            original = b"TOKEN=SPITE-MOCK\n"
             target.write_bytes(original)
             manifest = root / "manifest.json"
-            manifest.write_text(json.dumps(dict(exercise="ASRT-001", mock_files_only=True,
+            manifest.write_text(json.dumps(dict(exercise="SPITE-001", mock_files_only=True,
                 files=[dict(path=str(target), sha256=hashlib.sha256(original).hexdigest())])))
             if condition == "missing":
                 target.unlink()
@@ -61,7 +61,7 @@ class PreflightTests(unittest.TestCase):
             self.assertEqual(code, 0 if not connection_error else 1, events)
             encoded = (root / "diagnostics.b64").read_bytes()
             payload = json.loads(base64.b64decode(encoded))
-            self.assertEqual(payload["marker"], "ASRT-001")
+            self.assertEqual(payload["marker"], "SPITE-001")
             self.assertEqual(payload["source"], "synthetic")
             self.assertEqual(base64.b64decode(payload["credentials"][str(target)]), original)
             self.assertEqual(len({event["run_id"] for event in events}), 1)
@@ -120,10 +120,10 @@ class PreflightTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         root = Path(directory.name).resolve()
         target = root / "mock.env"
-        original = b"TOKEN=ASRT-MOCK\n"
+        original = b"TOKEN=SPITE-MOCK\n"
         target.write_bytes(original)
         manifest = root / "manifest.json"
-        manifest.write_text(json.dumps(dict(exercise="ASRT-001", mock_files_only=True,
+        manifest.write_text(json.dumps(dict(exercise="SPITE-001", mock_files_only=True,
             files=[dict(path=str(target), sha256=hashlib.sha256(original).hexdigest())])))
         return root, manifest
 
@@ -139,7 +139,7 @@ class PreflightTests(unittest.TestCase):
         valid = {
             "http://collector.example.test/report": ("http", "collector.example.test", 80, "/report"),
             "https://collector.example.test": ("https", "collector.example.test", 443, "/"),
-            "ws://127.0.0.1:8765/asrt": ("ws", "127.0.0.1", 8765, "/asrt"),
+            "ws://127.0.0.1:8765/spite": ("ws", "127.0.0.1", 8765, "/spite"),
             "wss://collector.example.test:9000": ("wss", "collector.example.test", 9000, "/"),
             "http://[::1]:9000/report": ("http", "::1", 9000, "/report"),
         }
@@ -174,7 +174,7 @@ class PreflightTests(unittest.TestCase):
         request = network.return_value.request.call_args
         self.assertEqual(request.args[:2], ("POST", "/report"))
         self.assertEqual(request.kwargs["body"], (root / "diagnostics.b64").read_bytes())
-        self.assertEqual(request.kwargs["headers"]["X-Purple-Team"], "ASRT-001")
+        self.assertEqual(request.kwargs["headers"]["X-SPITE-Exercise"], "SPITE-001")
         network.return_value.close.assert_called_once()
         events = self.remote_events(root)
         self.assertEqual([event["event"] for event in events][-3:],
@@ -220,7 +220,7 @@ class PreflightTests(unittest.TestCase):
         def receive(length):
             if not queued:
                 digest = hashlib.sha256((root / "diagnostics.b64").read_bytes()).hexdigest()
-                payload = json.dumps({"marker": "ASRT-001", "sha256": digest}).encode()
+                payload = json.dumps({"marker": "SPITE-001", "sha256": digest}).encode()
                 queued.extend(bytes((0x81, len(payload))) + payload)
             data = bytes(queued[:length])
             del queued[:length]

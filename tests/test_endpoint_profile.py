@@ -23,11 +23,11 @@ class EndpointProfileTests(unittest.TestCase):
         run = self.root / "run"
         run.mkdir()
         target = str(self.root / "pre-seeded-mock")
-        content = b"ASRT-001 synthetic artifact test"
+        content = b"SPITE-001 synthetic artifact test"
         run_id = "22222222-2222-4222-8222-222222222222"
-        manifest = dict(exercise="ASRT-001", mock_files_only=True,
+        manifest = dict(exercise="SPITE-001", mock_files_only=True,
                         files=[dict(path=target,sha256=op.hashlib.sha256(content).hexdigest())])
-        payload = dict(marker="ASRT-001",content_encoding="base64",run_id=run_id,
+        payload = dict(marker="SPITE-001",content_encoding="base64",run_id=run_id,
                        synthetic_credentials={target:base64.b64encode(content).decode()})
         body = base64.b64encode(json.dumps(payload).encode())
         if destination:
@@ -36,7 +36,7 @@ class EndpointProfileTests(unittest.TestCase):
                          dict(event="transfer_acknowledged",status=status,sha256=op.hashlib.sha256(body).hexdigest()),
                          dict(event="execution_completed",mode="remote")]
         else:
-            transfers = [dict(event="transfer_attempt",destination="http://127.0.0.1:8765/asrt"),
+            transfers = [dict(event="transfer_attempt",destination="http://127.0.0.1:8765/spite"),
                          dict(event="transfer_acknowledged",status=204,sha256=op.hashlib.sha256(body).hexdigest()),
                          dict(event="execution_completed",mode="loopback")]
         event_data = [
@@ -136,7 +136,7 @@ class EndpointProfileTests(unittest.TestCase):
         args,body=self.artifacts("pcap")
         args.pcap=str(self.root/"traffic.pcap")
         with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(op.verify(args),2)
-        request=b"POST /asrt HTTP/1.1\r\nContent-Length: "+str(len(body)).encode()+b"\r\n\r\n"+body
+        request=b"POST /spite HTTP/1.1\r\nContent-Length: "+str(len(body)).encode()+b"\r\n\r\n"+body
         Path(args.pcap).write_bytes(pcap([(50000,8765,100,request),(8765,50000,200,b"HTTP/1.0 204 No Content\r\n\r\n")]))
         args.output=str(self.root/"pcap-pass.json")
         with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(op.verify(args),0)
@@ -220,7 +220,7 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertEqual(report["test_cases"]["TC-05"],"not-run")
 
     def test_local_destination_still_requires_the_bundled_receiver_receipt(self):
-        destination="http://127.0.0.1:8765/asrt"
+        destination="http://127.0.0.1:8765/spite"
         args,_=self.artifacts(destination=destination)
         args.receipt=str(self.root/"receipt.jsonl")
         status,report=self.verify_endpoint(args)
@@ -297,7 +297,7 @@ class EndpointProfileTests(unittest.TestCase):
         plan=self.root/"plan.json"
         plan.write_text(json.dumps({"sample":["<workspace>/.env"]}))
         workspace=self.root/"workspace"
-        destination="http://127.0.0.1:8765/asrt"
+        destination="http://127.0.0.1:8765/spite"
         args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
                                 evidence_profile="endpoint",destination=destination)
         with patch.object(op.os,"geteuid",return_value=501), \

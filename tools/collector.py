@@ -13,18 +13,18 @@ class Handler(BaseHTTPRequestHandler):
         self.connection.settimeout(5)
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if self.path != "/asrt" or not 0 < length <= MAX_BODY_BYTES:
+            if self.path != "/spite" or not 0 < length <= MAX_BODY_BYTES:
                 raise ValueError("Unexpected path or size")
             body = self.rfile.read(length)
             payload = json.loads(base64.b64decode(body, validate=True))
-            if not isinstance(payload, dict) or payload.get("marker") != "ASRT-001":
+            if not isinstance(payload, dict) or payload.get("marker") != "SPITE-001":
                 raise ValueError("Unexpected marker")
         except (ValueError, OSError):
             self.send_error(400)
             return
         print(json.dumps(dict(event="collector_received", **payload)), flush=True)
         self.send_response(204)
-        self.send_header("X-ASRT-Receipt", hashlib.sha256(body).hexdigest())
+        self.send_header("X-SPITE-Receipt", hashlib.sha256(body).hexdigest())
         self.end_headers()
 
     def log_message(self, *args):

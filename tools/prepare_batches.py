@@ -102,7 +102,7 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None):
                         if record_created:
                             record_created(path, digest)
             if entries:
-                manifest = dict(exercise="ASRT-001", source=source, files=entries)
+                manifest = dict(exercise="SPITE-001", source=source, files=entries)
                 if source == "synthetic":
                     manifest["mock_files_only"] = True
                 with (output / (batch + ".json")).open("x") as stream:

@@ -17,7 +17,7 @@ from pathlib import Path
 
 TOKEN = re.compile(r"<([a-z0-9-]+)>")
 
-SYNTHETIC_ROOT = ".asrt-exercise"
+SYNTHETIC_ROOT = ".spite-exercise"
 SYNTHETIC_NAMES = {
     "chrome-profile": "chrome",
     "brave-profile": "brave",
