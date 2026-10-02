@@ -118,7 +118,7 @@ def run(manifest, send_loopback=False):
             })
             response = connection.getresponse()
             if response.status != 204:
-                raise RuntimeError("Collector returned status " + str(response.status))
+                raise RuntimeError("Receiver returned HTTP status " + str(response.status))
             emit("transfer_acknowledged", status=response.status)
         except (OSError, http.client.HTTPException, RuntimeError) as exc:
             emit("transfer_failed", error=str(exc))
@@ -131,7 +131,8 @@ def run(manifest, send_loopback=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", required=True)
-    parser.add_argument("--send-loopback", action="store_true")
+    parser.add_argument("--manifest", required=True, help="Prepared fake-file manifest")
+    parser.add_argument("--send-loopback", action="store_true",
+                        help="Send the bundle to the receiver at 127.0.0.1:8765")
     args = parser.parse_args()
     raise SystemExit(run(args.manifest, args.send_loopback))

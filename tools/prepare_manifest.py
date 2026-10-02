@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Register existing operator-seeded mock files BEFORE the exercise window."""
+"""Create a manifest for fake files that already exist."""
 import argparse
 import hashlib
 import importlib.util

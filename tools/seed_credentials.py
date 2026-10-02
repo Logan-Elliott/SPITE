@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed exact mock-file paths before the exercise; never replace existing entries."""
+"""Create fake credential files at exact paths without replacing existing entries."""
 import argparse
 from datetime import datetime, timezone
 import json

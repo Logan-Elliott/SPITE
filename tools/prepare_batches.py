@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare named mock-file batches; existing entries are never enrolled."""
+"""Create groups of fake test files without changing existing paths."""
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -15,12 +15,12 @@ def prepare(plan, workspace, output):
     if not workspace.is_dir():
         raise ValueError("Workspace must be a directory")
     if not isinstance(plan, dict) or not plan:
-        raise ValueError("Expected a nonempty batch mapping")
+        raise ValueError("The file-list JSON must contain at least one named group of paths")
     expanded = {}
     seen = set()
     for batch, paths in plan.items():
         if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", batch):
-            raise ValueError("Invalid batch name")
+            raise ValueError("File-group names may use lowercase letters, numbers, and hyphens")
         if not isinstance(paths, list) or not 1 <= len(paths) <= 32:
             raise ValueError("Each batch requires 1 to 32 exact files")
         expanded[batch] = []

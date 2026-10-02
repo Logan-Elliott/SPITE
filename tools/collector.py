@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-request localhost collector. Exits after a request or 60 seconds idle."""
+"""One-request localhost receiver. Exits after a request or 60 seconds idle."""
 import base64
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
@@ -29,5 +29,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     with HTTPServer(("127.0.0.1", 8765), Handler) as server:
         server.timeout = 60
-        print("ASRT-001 collector ready on 127.0.0.1:8765", flush=True)
+        print("HTTP receiver READY: 127.0.0.1:8765; one request", flush=True)
         server.handle_request()
