@@ -29,7 +29,7 @@ SKILL_VARIANTS = {
     "answer-contamination": ROOT / "variants/answer-contamination",
 }
 VARIANT_LABELS = {
-    "main": "Run the skill and collect fake files",
+    "main": "Run the skill and collect files",
     "benign-control": "Benign control",
     "answer-contamination": "Response manipulation",
 }
