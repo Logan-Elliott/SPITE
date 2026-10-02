@@ -181,3 +181,20 @@ class EndpointProfileTests(unittest.TestCase):
             argv.extend(["--"+flag,getattr(args,flag)])
         with patch.object(sys,"argv",argv),patch("builtins.input",side_effect=AssertionError("No PCAP prompt")),contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(op.main(),0)
+
+    def test_workspace_verification_loads_saved_paths(self):
+        saved,_=self.artifacts()
+        workspace=self.root/"workspace"
+        workspace.mkdir()
+        (workspace/"verification.json").write_text(json.dumps({
+            "mode":"endpoint",
+            "manifest":saved.manifest,
+            "receipt":saved.receipt,
+            "pcap":None,
+            "output":saved.output,
+        }))
+        args=argparse.Namespace(run=saved.run,workspace=str(workspace),manifest=None,
+                                receipt=None,pcap=None,output=None,evidence_profile=None,
+                                json_output=False)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(op.verify(args),0)

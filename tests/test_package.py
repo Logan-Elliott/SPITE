@@ -3,6 +3,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -11,6 +12,16 @@ from test_operator import op
 
 
 class CombinedSetupTests(unittest.TestCase):
+    def test_file_list_with_several_groups_requires_a_group(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve()
+            plan=root/"plan.json"
+            plan.write_text(json.dumps({"one":["<workspace>/first"],"two":["<workspace>/second"]}))
+            args=argparse.Namespace(plan=str(plan),workspace=str(root/"workspace"),apply=True,
+                                    evidence_profile="endpoint",group=None)
+            with patch.object(op.os,"geteuid",return_value=501),self.assertRaisesRegex(ValueError,"--group"):
+                op.setup(args)
+
     def test_setup_requires_one_group_and_writes_one_runbook(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory).resolve()
@@ -127,3 +138,10 @@ class CombinedSetupTests(unittest.TestCase):
             profile.write_text(json.dumps(base))
             with self.assertRaises(ValueError):
                 op.load_target_profile(profile)
+
+    def test_capture_help_does_not_request_sudo(self):
+        result=subprocess.run([str(op.CLI),"capture","--help"],cwd=op.ROOT,
+                              text=True,capture_output=True)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn("Capture TCP port 8765",result.stdout)
+        self.assertNotIn("sudo",result.stderr.lower())
