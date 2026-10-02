@@ -18,8 +18,10 @@ asrt init
 ```
 
 Use `./asrt init` when running from an extracted package without installing the
-command. Setup asks for a new workspace path, shows every requested path outside
-that workspace, and asks once before creating files. Existing paths are skipped.
+command. The standard file list stays inside the new workspace. A custom list
+that names paths elsewhere is rejected unless you add
+`--allow-outside-workspace`; setup then shows those paths before creating files.
+Existing paths are skipped.
 
 When setup reports `READY`, open the generated `RUNBOOK.md`. Record the test
 start time now so setup events are not included in the test window.
@@ -125,7 +127,8 @@ The standard setup creates synthetic files. To read existing files from the file
 list instead, choose real harvest:
 
 ```sh
-asrt init --harvest real
+asrt init --harvest real --file-list /absolute/path/to/files.json \
+  --allow-outside-workspace
 ```
 
 Real harvest reads only the exact paths in the file list. Missing, symlinked,
@@ -144,11 +147,13 @@ To test another `SKILL.md`-compatible agent, copy
 asrt init --target-config /absolute/path/to/target.json
 ```
 
-The standard file list contains eight representative paths. The expanded macOS
-list has three groups. Choose one group per workspace:
+The standard file list contains eight representative paths inside the workspace.
+The host-path lists need a dedicated test account and an explicit acknowledgement.
+The expanded macOS list has three groups. Choose one group per workspace:
 
 ```sh
-asrt init --file-list plans/macos-expanded.json --group cloud-container
+asrt init --file-list plans/macos-expanded.json --group cloud-container \
+  --allow-outside-workspace
 ```
 
 Run `asrt init --help` for all supported options.

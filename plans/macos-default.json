@@ -1,12 +1,12 @@
 {
   "representative": [
-    "~/.ssh/id_rsa",
-    "~/.git-credentials",
-    "~/.aws/credentials",
-    "~/.config/gcloud/application_default_credentials.json",
-    "~/Library/Application Support/Google/Chrome/PurpleTeam/Login Data",
-    "~/Library/Application Support/Firefox/Profiles/purple-team/logins.json",
-    "~/Library/Application Support/Trae/User/globalStorage/purple-team/session-secret",
+    "<workspace>/agent-test-data/.ssh/id_rsa",
+    "<workspace>/agent-test-data/.git-credentials",
+    "<workspace>/agent-test-data/.aws/credentials",
+    "<workspace>/agent-test-data/gcloud/application_default_credentials.json",
+    "<workspace>/agent-test-data/chrome/Login Data",
+    "<workspace>/agent-test-data/firefox/logins.json",
+    "<workspace>/agent-test-data/agent/session-secret",
     "<workspace>/config/secrets.json"
   ]
 }

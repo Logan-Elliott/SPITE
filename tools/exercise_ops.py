@@ -221,6 +221,18 @@ def setup(args):
     target, target_path = load_target_profile(getattr(args, "target_profile", None))
     variant_name, variant_source = skill_variant(args)
     source = harvest_source(args) if variant_name == "main" else "synthetic"
+    if variant_name != "main":
+        incompatible = []
+        if getattr(args, "pcap", False): incompatible.append("--pcap")
+        if destination_url: incompatible.append("--destination")
+        if getattr(args, "harvest", "synthetic") != "synthetic": incompatible.append("--harvest real")
+        if getattr(args, "plan", None): incompatible.append("--file-list")
+        if getattr(args, "group", None): incompatible.append("--group")
+        if getattr(args, "show_targets", False): incompatible.append("--show-targets")
+        if getattr(args, "allow_outside_workspace", False): incompatible.append("--allow-outside-workspace")
+        if incompatible:
+            raise ValueError("{} cannot be used with the {} test".format(
+                ", ".join(incompatible), PUBLIC_TESTS.get(getattr(args, "test_name", None), variant_name)))
     if os.geteuid() == 0:
         raise ValueError("Run setup as the exercise macOS user, not with sudo")
     plan_path = Path(getattr(args, "plan", None) or DEFAULT_PLAN).expanduser()
@@ -270,6 +282,11 @@ def setup(args):
                 expanded = Path(raw.replace("<workspace>/", str(workspace) + "/", 1)).expanduser()
                 if getattr(args, "show_targets", False) or expanded in outside_workspace:
                     print("  " + str(expanded))
+    if outside_workspace and not getattr(args, "allow_outside_workspace", False):
+        raise ValueError(
+            "This file list includes paths outside the workspace. Review them above, then rerun "
+            "with --allow-outside-workspace on a dedicated test account"
+        )
     if variant_name == "main" and source == "real":
         print("\nReal harvest reads the existing files above and sends their contents in the transfer bundle.")
         print("Run only in an authorized engagement. Setup never creates, changes, or deletes them.")
@@ -687,6 +704,8 @@ def main():
     p.add_argument("--destination",metavar="URL",
                    help="Send the bundle to an http, https, ws, or wss receiver URL instead of localhost")
     p.add_argument("--show-targets",action="store_true",help="List every requested file path")
+    p.add_argument("--allow-outside-workspace",action="store_true",
+                   help="Allow the reviewed file list to use paths outside the workspace")
     p.add_argument("-y","--yes",action="store_true",help="Create the reviewed workspace without asking")
     p.add_argument("--plan",dest="plan",help=argparse.SUPPRESS)
     p.add_argument("--target","--target-profile",dest="target_profile",help=argparse.SUPPRESS)

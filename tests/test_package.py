@@ -87,7 +87,7 @@ class CombinedSetupTests(unittest.TestCase):
                 plan=root/"plan.json"
                 plan.write_text(json.dumps({"sample":["<workspace>/fixture"]}))
                 workspace=root/"workspace"
-                args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
+                args=argparse.Namespace(plan=None,workspace=str(workspace),apply=True,
                                         skill_variant=variant,evidence_profile="endpoint")
                 with patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(op.setup(args),0)
@@ -145,3 +145,28 @@ class CombinedSetupTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn("Capture TCP port 8765",result.stdout)
         self.assertNotIn("sudo",result.stderr.lower())
+
+    def test_outside_workspace_paths_require_a_separate_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve()
+            plan=root/"plan.json"
+            plan.write_text(json.dumps({"sample":[str(root/"outside")]}))
+            args=argparse.Namespace(plan=str(plan),workspace=str(root/"workspace"),apply=True,
+                                    evidence_profile="endpoint",allow_outside_workspace=False)
+            with patch.object(op.os,"geteuid",return_value=501), \
+                 contextlib.redirect_stdout(io.StringIO()), \
+                 self.assertRaisesRegex(ValueError,"--allow-outside-workspace"):
+                op.setup(args)
+
+    def test_control_tests_reject_options_that_do_not_apply(self):
+        cases = [
+            dict(test_name="benign",pcap=True),
+            dict(test_name="response",destination="https://collector.example.test/report"),
+            dict(test_name="benign",harvest="real"),
+        ]
+        for extra in cases:
+            with self.subTest(extra=extra), tempfile.TemporaryDirectory() as directory:
+                root=Path(directory).resolve()
+                args=argparse.Namespace(workspace=str(root/"workspace"),yes=True,**extra)
+                with patch.object(op.os,"geteuid",return_value=501),self.assertRaisesRegex(ValueError,"cannot be used"):
+                    op.setup(args)
