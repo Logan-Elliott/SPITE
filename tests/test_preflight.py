@@ -183,6 +183,15 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(events[-2]["status"], 204)
         self.assertEqual(events[-1]["mode"], "remote")
 
+    def test_send_to_http_dials_ipv6_without_url_brackets(self):
+        body = b"bundle"
+        parts = preflight.parse_destination("http://[::1]:9000/report")
+        with patch.object(preflight.http.client, "HTTPConnection") as network:
+            network.return_value.getresponse.return_value.status = 204
+            network.return_value.getresponse.return_value.getheader.return_value = hashlib.sha256(body).hexdigest()
+            preflight.send_http(parts, body)
+        network.assert_called_once_with("::1", 9000, timeout=5)
+
     def test_send_to_https_uses_certificate_verifying_connection(self):
         root, manifest = self.remote_fixture()
         with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \

@@ -130,6 +130,9 @@ class OperatorTests(unittest.TestCase):
             capture.write_bytes(pcap([]));args.output=str(root/"empty.json")
             with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(op.verify(args),2)
             self.assertEqual(json.loads((root/"empty.json").read_text())["status"],"INCOMPLETE")
+            capture.write_bytes(b"not a pcap");args.output=str(root/"malformed.json")
+            with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(op.verify(args),1)
+            self.assertEqual(json.loads((root/"malformed.json").read_text())["status"],"FAIL")
             # Application mismatch must not be disguised as an empty-capture issue.
             receipt.write_text(json.dumps(dict(event="collector_received",run_id=payload["run_id"]))+"\n")
             args.output=str(root/"bad-receipt.json")

@@ -488,7 +488,7 @@ def setup(args):
         if variant_name == "main":
             if destination_url:
                 transfer_title = "Tell the agent to use the skill and send to your receiver"
-                transfer_option = "--send-to " + destination_url
+                transfer_option = "--send-to " + shlex.quote(destination_url)
             else:
                 transfer_title = "Tell the agent to use the skill and send to localhost"
                 transfer_option = "--send-loopback"
@@ -808,7 +808,8 @@ def verify(args):
             report["status"] = "VERIFIED" if all(checks.values()) else ("INCOMPLETE" if packets==0 and application_passed else "FAIL")
     except (OSError,ValueError,KeyError,IndexError,TypeError) as exc:
         report["error"] = str(exc)
-        if profile in ("endpoint", "offline") or (application_checked and not application_passed):
+        if (profile in ("endpoint", "offline") or (application_checked and not application_passed)
+                or (profile == "pcap" and pcap_path is not None and pcap_path.exists())):
             report["status"] = "FAIL"
     dump(output,report)
     if getattr(args, "json_output", False):

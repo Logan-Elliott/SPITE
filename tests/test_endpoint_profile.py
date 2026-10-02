@@ -308,6 +308,18 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertIn("--send-to "+destination,runbook)
         self.assertIn(str(op.CLI)+" receive",runbook)
 
+    def test_setup_quotes_destination_shell_characters(self):
+        plan=self.root/"plan.json"
+        plan.write_text(json.dumps({"sample":["<workspace>/.env"]}))
+        workspace=self.root/"workspace"
+        destination="https://collector.example.test/report?name=purple&step=1"
+        args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
+                                evidence_profile="endpoint",destination=destination)
+        with patch.object(op.os,"geteuid",return_value=501), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(op.setup(args),0)
+        self.assertIn("--send-to '"+destination+"'",(workspace/"RUNBOOK.md").read_text())
+
     def test_cli_verify_accepts_destination_without_receipt(self):
         args,_=self.artifacts(destination="https://collector.example.test/report")
         argv=["exercise_ops.py","verify","--evidence-profile","endpoint",

@@ -118,9 +118,9 @@ def connect_host(parts):
 def send_http(parts, body):
     # One POST; no redirects, no proxy environment; https verifies certificates.
     if parts["scheme"] == "https":
-        connection = http.client.HTTPSConnection(connect_host(parts), parts["port"], timeout=5)
+        connection = http.client.HTTPSConnection(parts["host"], parts["port"], timeout=5)
     else:
-        connection = http.client.HTTPConnection(connect_host(parts), parts["port"], timeout=5)
+        connection = http.client.HTTPConnection(parts["host"], parts["port"], timeout=5)
     try:
         connection.request("POST", parts["path"], body=body, headers={
             "Content-Type": "application/octet-stream",
