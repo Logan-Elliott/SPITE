@@ -68,7 +68,9 @@ asrt init --test response
 ```
 
 These tests install skill packages with the same name and description as the
-normal test. They do not create fake credential files.
+normal test. The benign control uses the same synthetic files, manifest cue, and
+prompt as the normal skill-selection test. The response-manipulation test does
+not create fake credential files.
 
 Add packet capture when you need PCAP evidence from the localhost transfer:
 

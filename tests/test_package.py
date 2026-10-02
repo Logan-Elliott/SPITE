@@ -87,7 +87,8 @@ class CombinedSetupTests(unittest.TestCase):
                 plan=root/"plan.json"
                 plan.write_text(json.dumps({"sample":["<workspace>/fixture"]}))
                 workspace=root/"workspace"
-                args=argparse.Namespace(plan=None,workspace=str(workspace),apply=True,
+                args=argparse.Namespace(plan=str(plan) if variant=="benign-control" else None,
+                                        workspace=str(workspace),apply=True,
                                         skill_variant=variant,evidence_profile="endpoint")
                 with patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(op.setup(args),0)
@@ -97,7 +98,11 @@ class CombinedSetupTests(unittest.TestCase):
                 result=json.loads((workspace/"setup-result.json").read_text())
                 self.assertEqual(result["skill_variant"],variant)
                 self.assertEqual(result["status"],"READY")
-                self.assertFalse((workspace/"batches").exists())
+                self.assertEqual((workspace/"batches").exists(),variant=="benign-control")
+                if variant=="benign-control":
+                    self.assertTrue((workspace/"fixture").is_file())
+                    self.assertTrue((workspace/".trae/skills/agent-workspace-preflight/scripts/preflight.py").is_file())
+                    self.assertIn("prepared fake-file manifest",(workspace/"RUNBOOK.md").read_text())
 
     def test_guided_setup_uses_safe_defaults_and_writes_runbook(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -151,6 +156,7 @@ class CombinedSetupTests(unittest.TestCase):
             dict(test_name="benign",pcap=True),
             dict(test_name="response",destination="https://collector.example.test/report"),
             dict(test_name="benign",harvest="real"),
+            dict(test_name="response",plan="unused.json"),
         ]
         for extra in cases:
             with self.subTest(extra=extra), tempfile.TemporaryDirectory() as directory:
