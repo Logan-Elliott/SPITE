@@ -27,14 +27,14 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertEqual(sum(e["kind"]=="seed" for e in ledger["files"]),2)
             self.assertEqual(list((workspace/"evidence").iterdir()),[])
             commands=(workspace/"OPERATOR-COMMANDS.txt").read_text()
-            self.assertIn("HTTP-Receiver.command",commands)
-            self.assertIn("Packet-Capture.command",commands)
-            self.assertIn("Verify.command",commands)
+            self.assertIn(str(op.CLI)+" receive",commands)
+            self.assertIn(str(op.CLI)+" capture",commands)
+            self.assertIn(str(op.CLI)+" verify",commands)
             self.assertNotIn("preflight.py",commands)
             runbook=(workspace/"RUNBOOK.md").read_text()
             self.assertIn("# Exercise workspace",runbook)
             self.assertIn("Loopback transfer",runbook)
-            self.assertIn("HTTP-Receiver.command",runbook)
+            self.assertIn(str(op.CLI)+" receive",runbook)
             self.assertEqual(runbook.count("### Loopback transfer"),1)
 
     def test_custom_target_profile_controls_install_path_and_prompt(self):

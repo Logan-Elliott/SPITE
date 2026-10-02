@@ -150,10 +150,10 @@ class EndpointProfileTests(unittest.TestCase):
              contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(op.setup(args),0)
         commands=(workspace/"OPERATOR-COMMANDS.txt").read_text()
-        for forbidden in ("Packet-Capture.command","--pcap","sudo","tcpdump"):
+        for forbidden in (str(op.CLI)+" capture","--pcap","sudo","tcpdump"):
             self.assertNotIn(forbidden,commands)
-        self.assertIn("HTTP-Receiver.command",commands)
-        self.assertIn("Verify.command --evidence-profile endpoint",commands)
+        self.assertIn(str(op.CLI)+" receive",commands)
+        self.assertIn(str(op.CLI)+" verify --mode endpoint",commands)
         self.assertIn("EDR/SIEM telemetry is external",commands)
         for name in ("preparation.json","setup-result.json"):
             self.assertEqual(json.loads((workspace/name).read_text())["evidence_profile"],"endpoint")

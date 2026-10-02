@@ -13,11 +13,20 @@ does not collect existing credentials or send data off the endpoint.
 Requirements: macOS, Python 3.9+, a disposable project, and an agent that supports
 project-local `SKILL.md` packages.
 
-Start the guided setup:
+Install the command from the cloned or extracted package once:
 
 ```sh
-./macos/Setup.command
+./asrt install
 ```
+
+The installer reports if `~/.local/bin` needs to be added to `PATH`. Then start the
+guided setup like any other CLI tool:
+
+```sh
+asrt init
+```
+
+You can also run `./asrt init` directly without installing it.
 
 Press Enter to accept the recommended endpoint mode, main variant, and generated
 workspace path. Review the summary and answer `y` to continue. Setup installs the
@@ -41,7 +50,7 @@ The runbook also contains the cleanup commands. For an already reviewed,
 noninteractive setup:
 
 ```sh
-./macos/Setup.command --workspace "$HOME/agent-skill-exercise" --yes
+asrt init --workspace "$HOME/agent-skill-exercise" --yes
 ```
 
 See [OPERATOR.md](OPERATOR.md) for the complete runbook.
@@ -68,9 +77,9 @@ Prepare separate workspaces when you want the matched benign baseline or the
 output-manipulation case:
 
 ```sh
-./macos/Setup.command --variant benign-control
+asrt init --variant benign-control
 
-./macos/Setup.command --variant answer-contamination
+asrt init --variant answer-contamination
 ```
 
 The variants use the same skill name and description. Setup generates the correct
@@ -83,7 +92,7 @@ Copy [profiles/custom-example.json](profiles/custom-example.json) and set the
 documented project-relative skill path for the target:
 
 ```sh
-./macos/Setup.command --target /absolute/path/to/target.json
+asrt init --target /absolute/path/to/target.json
 ```
 
 The included [Trae profile](profiles/trae.json) is the reference configuration.

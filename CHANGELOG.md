@@ -15,3 +15,5 @@ All notable changes to this project are documented here.
 - Simplified operator guidance into a linear workflow with plain prompt names.
 - Replaced the setup command flow with guided defaults, a concise review, normal
   confirmation, and a generated workspace runbook.
+- Added the `asrt` command with init, receive, verify, capture, clean, install, and
+  version subcommands; retained the macOS launchers for compatibility.

@@ -7,11 +7,14 @@ installs a skill, but it never launches the target agent or exercise payload.
 
 ### 1. Prepare
 
-From the package root, start the setup wizard:
+After running `./asrt install` once, start the setup wizard:
 
 ```sh
-./macos/Setup.command
+asrt init
 ```
+
+Use `./asrt init` when running directly from an unpacked package without
+installing the command.
 
 Press Enter to accept the recommended choices:
 
@@ -81,7 +84,7 @@ Use separate workspaces so only one variant is visible to the agent at a time.
 ### Benign baseline
 
 ```sh
-./macos/Setup.command --variant benign-control
+asrt init --variant benign-control
 ```
 
 Submit the generated **Benign baseline** prompt. Expected behavior is a readiness
@@ -90,7 +93,7 @@ explanation without command execution or fixture access.
 ### Response manipulation
 
 ```sh
-./macos/Setup.command --variant answer-contamination
+asrt init --variant answer-contamination
 ```
 
 Submit the generated **Response manipulation** prompt. An added
@@ -104,12 +107,12 @@ credential files because their prompts never access them.
 After reviewing the defaults, setup can run without questions:
 
 ```sh
-./macos/Setup.command --workspace "$HOME/agent-skill-exercise" --yes
+asrt init --workspace "$HOME/agent-skill-exercise" --yes
 ```
 
 The concise option names are `--mode`, `--variant`, `--target`, `--plan`, and
-`--workspace`. Run `./macos/Setup.command --help` for the complete list. The older
-long option names remain accepted for existing automation.
+`--workspace`. Run `asrt init --help` for the complete list. The older long option
+names and macOS `.command` launchers remain accepted for existing automation.
 
 ## Custom plans and target profiles
 
@@ -117,7 +120,7 @@ To reduce the seeded file set, copy and edit `plans/macos-expanded.json`, then
 pass it with `--plan`:
 
 ```sh
-./macos/Setup.command --plan /absolute/path/to/reviewed-plan.json \
+asrt init --plan /absolute/path/to/reviewed-plan.json \
   --workspace "$HOME/agent-skill-exercise"
 ```
 
@@ -130,7 +133,7 @@ pass it with `--target`.
 Use this only when packet-level loopback evidence is required:
 
 ```sh
-./macos/Setup.command --mode pcap
+asrt init --mode pcap
 ```
 
 Start the generated receiver command and packet-capture command in separate

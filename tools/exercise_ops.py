@@ -20,6 +20,7 @@ import time
 from prepare_batches import prepare
 
 ROOT = Path(__file__).resolve().parents[1]
+CLI = ROOT / "asrt"
 SKILL = ROOT / "skills/agent-workspace-preflight"
 SKILL_VARIANTS = {
     "main": SKILL,
@@ -108,7 +109,7 @@ def choose(label, choices, default):
 
 
 def write_workspace_runbook(path, target, variant, profile, prompts, commands):
-    cleanup = shlex.join([str(ROOT / "macos/Cleanup.command"), "--workspace", str(path.parent)])
+    cleanup = shlex.join([str(CLI), "clean", "--workspace", str(path.parent)])
     lines = [
         "# Exercise workspace",
         "",
@@ -282,12 +283,12 @@ def setup(args):
             receipt=str(prefix)+".jsonl"
             pcap=str(prefix)+".pcap"
             group_commands = ["Manifest: "+str(manifest),
-                "Separate receiver terminal: "+shlex.join([str(ROOT/"macos/HTTP-Receiver.command"),"--output",receipt])]
-            verification = [str(ROOT/"macos/Verify.command"),"--evidence-profile",profile,
+                "Separate receiver terminal: "+shlex.join([str(CLI),"receive","--output",receipt])]
+            verification = [str(CLI),"verify","--mode",profile,
                             "--manifest",str(manifest),"--receipt",receipt,
                             "--output",str(prefix)+"-verification.json"]
             if profile == "pcap":
-                group_commands.append("Separate capture terminal: "+shlex.join([str(ROOT/"macos/Packet-Capture.command"),"--output",pcap]))
+                group_commands.append("Separate capture terminal: "+shlex.join([str(CLI),"capture","--output",pcap]))
                 verification.extend(["--pcap",pcap])
             when = "After the agent completes and capture is stopped: " if profile == "pcap" else "After the agent completes: "
             group_commands.extend([when+shlex.join(verification),""])
@@ -361,7 +362,7 @@ def capture(args):
     if sys.platform != "darwin":
         raise ValueError("Capture launcher targets macOS lo0")
     if os.geteuid() != 0:
-        raise ValueError("Run Packet-Capture.command with administrator approval (sudo)")
+        raise ValueError("Run `asrt capture` with administrator approval (sudo)")
     # Reserve evidence outputs before elevation; no existing files replaced.
     with output.open("xb"):
         pass
@@ -447,7 +448,7 @@ def tcp_streams(raw):
 def verify(args):
     profile = evidence_profile(args)
     if profile == "endpoint" and getattr(args,"pcap",None):
-        raise ValueError("Endpoint profile does not use --pcap; choose --evidence-profile pcap to verify a capture")
+        raise ValueError("Endpoint mode does not use --pcap; choose --mode pcap to verify a capture")
     run = ask_path(args.run, "Run artifact directory printed by the agent: ")
     manifest_path = ask_path(args.manifest, "Manifest used by the agent: ")
     receipt_path = ask_path(args.receipt, "HTTP receipt log: ")
@@ -547,9 +548,9 @@ def cleanup(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="asrt",description=__doc__)
     sub = parser.add_subparsers(dest="phase",required=True)
-    p=sub.add_parser("setup",help="Create an exercise workspace")
+    p=sub.add_parser("init",aliases=("setup",),help="Create an exercise workspace")
     p.add_argument("-w","--workspace",help="New workspace path")
     p.add_argument("--plan",help="Mock-file plan JSON")
     p.add_argument("--target","--target-profile",dest="target_profile",
@@ -561,17 +562,25 @@ def main():
     p.add_argument("--show-targets",action="store_true",help="List every requested mock-file path")
     p.add_argument("-y","--yes",action="store_true",help="Accept the reviewed setup without prompting")
     p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
-    for name in ("receiver","capture"):
+    for name in ("receive","receiver","capture"):
         p=sub.add_parser(name);p.add_argument("--output");p.add_argument("--timeout",type=int,default=900)
     p=sub.add_parser("verify")
-    p.add_argument("--evidence-profile",choices=("endpoint","pcap"),default="pcap")
+    p.add_argument("--mode","--evidence-profile",dest="evidence_profile",
+                   choices=("endpoint","pcap"),default="pcap")
     for name in ("run","manifest","receipt","pcap","output"):p.add_argument("--"+name)
-    p=sub.add_parser("cleanup");p.add_argument("--workspace");p.add_argument("--apply",action="store_true")
+    for name in ("clean","cleanup"):
+        p=sub.add_parser(name);p.add_argument("--workspace");p.add_argument("--apply",action="store_true")
     args=parser.parse_args()
     if args.phase=="verify" and args.evidence_profile=="endpoint" and args.pcap:
-        parser.error("--pcap is outside the endpoint profile; select --evidence-profile pcap")
+        parser.error("--pcap is outside endpoint mode; select --mode pcap")
     if hasattr(args,"timeout") and not 1<=args.timeout<=3600:parser.error("timeout must be 1–3600 seconds")
-    return globals()[args.phase](args)
+    handlers = {
+        "init": setup, "setup": setup,
+        "receive": receiver, "receiver": receiver,
+        "capture": capture, "verify": verify,
+        "clean": cleanup, "cleanup": cleanup,
+    }
+    return handlers[args.phase](args)
 
 
 if __name__=="__main__":

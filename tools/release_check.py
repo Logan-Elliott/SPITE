@@ -50,7 +50,7 @@ def main():
     validate_markdown_links()
     if shutil.which("zsh"):
         launchers = sorted((ROOT / "macos").glob("*.command"))
-        run(["zsh", "-n", str(ROOT / "macos/launch.sh"), *map(str, launchers)])
+        run(["zsh", "-n", str(ROOT / "asrt"), str(ROOT / "macos/launch.sh"), *map(str, launchers)])
     else:
         print("zsh unavailable; launcher syntax check skipped on this platform.")
     builder=[sys.executable, str(ROOT / "tools/build_package.py")]
