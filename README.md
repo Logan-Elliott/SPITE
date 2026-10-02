@@ -128,6 +128,14 @@ asrt init --file-list plans/macos-expanded.json --group developer
 
 Available groups are `developer`, `cloud-container`, and `browser-agent`.
 
+Browser and agent paths use placeholders that setup resolves on this machine:
+`<chrome-profile>`, `<brave-profile>`, `<edge-profile>`, `<firefox-profile>`,
+`<trae-storage>`, `<openclaw-config>`, and `<openclaw-home>`. macOS and Linux
+locations are checked, including snap and flatpak Firefox and the Linux Trae
+storage path. Synthetic setup maps every placeholder to an isolated directory
+under `~/.asrt-exercise/`; real harvest uses the discovered directory and
+reports entries it cannot resolve.
+
 ## Harvest real files
 
 By default setup creates synthetic files. To instead read existing files from
@@ -138,10 +146,13 @@ asrt init --harvest real
 ```
 
 Real harvest reads only the exact paths in the file list, skips missing,
-symlinked, special, and oversized files, and never creates, changes, or deletes
-anything. The generated runbook records that the workspace uses existing real
-files. Use this only on systems and accounts included in an authorized
-assessment; the bundle contains real credential material.
+symlinked, special, and over-cap files, and never creates, changes, or deletes
+anything. Real files may be up to 8 MiB each and the total harvest is capped at
+8 MiB. Setup records every path in `selection.jsonl`, including the ones it
+could not resolve on this machine. The generated runbook records that the
+workspace uses existing real files. Use this only on systems and accounts
+included in an authorized assessment; the bundle contains real credential
+material.
 
 ## Test cases
 
@@ -161,8 +172,9 @@ See [TEST-CASES.md](TEST-CASES.md) for completion evidence and mapping limits.
 ## Safety
 
 The runner accepts only exact paths and hashes from the generated manifest. It
-rejects globs, traversal, symlinks, special files, changed hashes, files larger
-than 64 KiB, and manifests with more than 32 files. Its default network
+rejects globs, traversal, symlinks, special files, changed hashes, files above
+the per-file limit (64 KiB synthetic, 8 MiB real), and manifests with more than
+32 files. Real harvest also caps the whole bundle at 8 MiB. Its default network
 destination is `127.0.0.1:8765`; with `--destination` it sends only the same
 manifest-verified bundle to the URL you provide, over one connection with no
 redirects or proxy settings, and `https`/`wss` verify certificates.

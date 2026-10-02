@@ -164,7 +164,8 @@ asrt init --harvest real
 ```
 
 Real harvest reads only the exact paths in the file list. Missing, symlinked,
-special, and oversized files are skipped and recorded in `selections.jsonl`.
+special, and over-cap files are skipped and recorded in `selection.jsonl`.
+Real files may be up to 8 MiB each, and the total harvest is capped at 8 MiB.
 Setup never creates, changes, or deletes these files, and cleanup preserves
 them. The runbook records that the workspace uses existing real files. The
 transfer bundle then contains real credential material, so use this option only
@@ -185,6 +186,15 @@ list has three groups. Choose one group per workspace:
 ```sh
 asrt init --file-list plans/macos-expanded.json --group cloud-container
 ```
+
+Browser and agent paths use placeholders that setup resolves on this machine:
+`<chrome-profile>`, `<brave-profile>`, `<edge-profile>`, `<firefox-profile>`,
+`<trae-storage>`, `<openclaw-config>`, and `<openclaw-home>`. Both macOS and
+Linux locations are checked, including snap and flatpak Firefox and the Linux
+Trae storage path. Synthetic setup maps each placeholder to an isolated
+directory under `~/.asrt-exercise/` so it never touches a real profile. Real
+harvest uses the discovered directory and records `unresolved` for products that
+are not installed.
 
 Run `asrt init --help` for all supported options.
 

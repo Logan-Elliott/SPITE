@@ -31,18 +31,25 @@ The release gate runs the unit suite, parses every Python and JSON source, check
 the macOS launcher syntax when `zsh` is available, builds the operator archive, and
 validates the archive's CRC and `PACKAGE-HASHES.json` contents.
 
-Tests use temporary files and mocked network connections. They never
-install a skill into an actual agent product or collect real credential data.
+The unit tests use temporary files and mocked network connections. They never
+install a skill into an actual agent product or read a real credential. The
+dedicated VM check below does read real host files chosen by the operator.
 
 ## Dedicated VM check
 
-On 2026-10-02, the platform-neutral collection and transfer path was also run on
-a dedicated Ubuntu 24.04 VM with Python 3.12.3. The test created a synthetic AWS
+On 2026-10-02, the platform-neutral collection and transfer path was run on a
+dedicated Ubuntu 24.04 VM with Python 3.12.3. One check created a synthetic AWS
 credential at its normal host path, selected it with `--harvest real`, staged the
 bundle, sent it through the real localhost HTTP receiver, and verified the saved
-receipt. All nine artifact and receipt checks passed and the report status was
-`VERIFIED`. The synthetic credential and its newly created parent directory were
-removed after verification.
+receipt. The browser-agent group was also resolved on that VM: setup discovered
+the snap Firefox profile at
+`~/snap/firefox/common/.mozilla/firefox/<profile>/`, collected `key4.db` and
+`cookies.sqlite`, discovered the Linux Trae store at
+`~/.config/Trae/User/globalStorage/state.vscdb`, and reported the Chrome, Brave,
+Edge, and openclaw entries as unresolved. The staged bundle was sent through the
+real loopback receiver and verified. All artifact and receipt checks passed, the
+report status was `ARTIFACTS VERIFIED`, and the real files were unchanged after
+setup and cleanup.
 
 This VM check used a real socket and host path. It did not run a coding agent,
 macOS packet capture, or endpoint detection product, so it does not replace the

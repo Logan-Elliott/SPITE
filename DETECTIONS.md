@@ -39,6 +39,6 @@ whether the action ran.
 
 Synthetic setup creates the fake files before the test window. Do not count those
 writes as TC-03. Real harvest reads only the exact existing paths in the file
-list, still capped at 64 KiB per file, so it does not test large browser stores
-or Keychains. The localhost transfer does not test egress; use a destination URL
-to exercise external network detections.
+list, capped at 8 MiB per file and 8 MiB total, so it collects small credential
+stores but not very large browser databases. The localhost transfer does not
+test egress; use a destination URL to exercise external network detections.

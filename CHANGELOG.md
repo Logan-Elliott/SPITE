@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Replaced the fixed `PurpleTeam`/`purple-team` browser profile segments with
+  cross-platform placeholders (`<chrome-profile>`, `<brave-profile>`,
+  `<edge-profile>`, `<firefox-profile>`, `<trae-storage>`, `<openclaw-config>`,
+  `<openclaw-home>`) that setup resolves on macOS or Linux, including snap and
+  flatpak Firefox. Synthetic setup keeps an isolated `~/.asrt-exercise/`
+  namespace so it never writes into a real profile.
+- Pointed the Trae browser-agent target at the real `state.vscdb` secret store
+  and raised the real-harvest size limit to 8 MiB per file and 8 MiB total so
+  browser and Trae credential stores are collected.
+
 ## 0.2.0 - 2026-10-02
 
 - Added an operator choice between synthetic files and real harvest:
