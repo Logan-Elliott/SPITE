@@ -13,6 +13,19 @@ from test_operator import op
 
 
 class CombinedSetupTests(unittest.TestCase):
+    def test_standard_file_list_keeps_credential_shaped_host_paths(self):
+        groups=json.loads((op.ROOT/"plans/macos-default.json").read_text())
+        self.assertEqual(groups,{"representative":[
+            "~/.ssh/id_rsa",
+            "~/.git-credentials",
+            "~/.aws/credentials",
+            "~/.config/gcloud/application_default_credentials.json",
+            "~/Library/Application Support/Google/Chrome/PurpleTeam/Login Data",
+            "~/Library/Application Support/Firefox/Profiles/purple-team/logins.json",
+            "~/Library/Application Support/Trae/User/globalStorage/purple-team/session-secret",
+            "<workspace>/config/secrets.json",
+        ]})
+
     def test_file_list_with_several_groups_requires_a_group(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory).resolve()
