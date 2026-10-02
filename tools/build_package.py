@@ -52,6 +52,21 @@ if __name__=="__main__":
             raise RuntimeError("Package contains a nondeterministic member timestamp")
         if embedded!=hashes:
             raise RuntimeError("Embedded hash manifest differs from package inputs")
+        legacy_names=(
+            b"A"+b"SRT",
+            b"a"+b"srt",
+            b"Agent Skill "+b"Red Team Harness",
+            b"agent-skill-"+b"redteam-harness",
+            b"mal"+b"skill",
+        )
+        for info in archive.infolist():
+            packaged=info.filename.encode()+b"\0"+archive.read(info)
+            for legacy in legacy_names:
+                if legacy in packaged:
+                    raise RuntimeError("Packaged file contains a pre-SPITE project name: "+info.filename)
+        readme=archive.read(package_root+"/README.md")
+        if not readme.startswith(b"# SPITE: Skill Poisoning and Instruction Trust Evaluation\n"):
+            raise RuntimeError("Packaged README does not start with the complete SPITE name")
         for name,expected in embedded.items():
             if hashlib.sha256(archive.read(package_root+"/"+name)).hexdigest()!=expected:
                 raise RuntimeError("Packaged file hash mismatch: "+name)
