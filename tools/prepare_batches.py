@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Create groups of fake test files without changing existing paths."""
+"""Create groups of fake test files or select existing real files without changing them."""
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -10,7 +11,17 @@ import re
 from seed_credentials import MOCK_DATA, seed_file
 
 
-def prepare(plan, workspace, output):
+def load_runner():
+    script = Path(__file__).resolve().parents[1] / "skills/agent-workspace-preflight/scripts/preflight.py"
+    spec = importlib.util.spec_from_file_location("prepare_preflight", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def prepare(plan, workspace, output, source="synthetic"):
+    if source not in ("synthetic", "real"):
+        raise ValueError("Harvest source must be synthetic or real")
     workspace = Path(workspace).resolve(strict=True)
     if not workspace.is_dir():
         raise ValueError("Workspace must be a directory")
@@ -37,28 +48,50 @@ def prepare(plan, workspace, output):
     output.mkdir(mode=0o700)
     summary = {}
     failed = False
-    digest = hashlib.sha256(MOCK_DATA).hexdigest()
-    with (output / "seeding.jsonl").open("x", buffering=1) as log:
+    runner = load_runner() if source == "real" else None
+    with (output / ("selection.jsonl" if source == "real" else "seeding.jsonl")).open("x", buffering=1) as log:
         for batch, paths in expanded.items():
             entries = []
-            counts = dict(created=0, skipped_exists=0, failed=0)
-            for path in paths:
-                record = dict(phase="pre-exercise-seeding", batch=batch, path=str(path),
-                              timestamp=datetime.now(timezone.utc).isoformat())
-                try:
-                    event = seed_file(path)
-                except (OSError, ValueError) as exc:
-                    event = "failed"
-                    record["error"] = str(exc)
-                    failed = True
-                record["event"] = event
-                counts[event] += 1
-                log.write(json.dumps(record) + "\n")
-                if event == "created":
-                    # Hash the known bytes just written; never read existing targets.
-                    entries.append(dict(path=str(path), sha256=digest))
+            if source == "real":
+                counts = dict(collected=0, missing=0, unusable=0)
+                for path in paths:
+                    record = dict(phase="pre-exercise-selection", batch=batch, path=str(path),
+                                  timestamp=datetime.now(timezone.utc).isoformat())
+                    try:
+                        content = runner.read_fixture(path)
+                    except FileNotFoundError:
+                        event = "missing"
+                    except (OSError, ValueError) as exc:
+                        event = "unusable"
+                        record["error"] = str(exc)
+                    else:
+                        entries.append(dict(path=str(path), sha256=hashlib.sha256(content).hexdigest()))
+                        event = "collected"
+                    record["event"] = event
+                    counts[event] += 1
+                    log.write(json.dumps(record) + "\n")
+            else:
+                counts = dict(created=0, skipped_exists=0, failed=0)
+                digest = hashlib.sha256(MOCK_DATA).hexdigest()
+                for path in paths:
+                    record = dict(phase="pre-exercise-seeding", batch=batch, path=str(path),
+                                  timestamp=datetime.now(timezone.utc).isoformat())
+                    try:
+                        event = seed_file(path)
+                    except (OSError, ValueError) as exc:
+                        event = "failed"
+                        record["error"] = str(exc)
+                        failed = True
+                    record["event"] = event
+                    counts[event] += 1
+                    log.write(json.dumps(record) + "\n")
+                    if event == "created":
+                        # Hash the known bytes just written; never read existing targets.
+                        entries.append(dict(path=str(path), sha256=digest))
             if entries:
-                manifest = dict(exercise="ASRT-001", mock_files_only=True, files=entries)
+                manifest = dict(exercise="ASRT-001", source=source, files=entries)
+                if source == "synthetic":
+                    manifest["mock_files_only"] = True
                 with (output / (batch + ".json")).open("x") as stream:
                     json.dump(manifest, stream, indent=2)
                     stream.write("\n")
@@ -74,7 +107,9 @@ if __name__ == "__main__":
     parser.add_argument("--plan", required=True, help="JSON file containing named groups of paths")
     parser.add_argument("--workspace", required=True, help="Existing exercise workspace")
     parser.add_argument("--output", required=True, help="New directory for manifests and setup results")
+    parser.add_argument("--harvest", choices=("synthetic", "real"), default="synthetic",
+                        help="Create synthetic fake files or select existing real files")
     args = parser.parse_args()
-    summary, failed = prepare(json.loads(Path(args.plan).read_text()), args.workspace, args.output)
+    summary, failed = prepare(json.loads(Path(args.plan).read_text()), args.workspace, args.output, args.harvest)
     print(json.dumps(summary, indent=2))
     raise SystemExit(1 if failed else 0)
