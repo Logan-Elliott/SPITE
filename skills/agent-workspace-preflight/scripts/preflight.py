@@ -60,19 +60,29 @@ def validate_manifest(data):
 
 
 def read_fixture(path):
-    # Reject directory scans, special files, and symlink components.
+    # Walk every component without following links so a parent cannot be swapped
+    # between a path check and the final open.
     path = Path(path)
-    if any(p.is_symlink() for p in (path, *path.parents)):
-        raise ValueError("Symlink paths are not accepted")
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    with os.fdopen(fd, "rb") as stream:
-        info = os.fstat(stream.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
-            raise ValueError("Expected a regular file of at most 64 KiB")
-        content = stream.read(MAX_FILE_BYTES + 1)
-        if len(content) > MAX_FILE_BYTES:
-            raise ValueError("File grew beyond the size limit")
-        return content
+    if not path.is_absolute() or not path.name:
+        raise ValueError("Expected an absolute file path")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    parent_fd = os.open(path.anchor, directory_flags)
+    try:
+        for component in path.parts[1:-1]:
+            next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = next_fd
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
+                raise ValueError("Expected a regular file of at most 64 KiB")
+            content = stream.read(MAX_FILE_BYTES + 1)
+            if len(content) > MAX_FILE_BYTES:
+                raise ValueError("File grew beyond the size limit")
+            return content
+    finally:
+        os.close(parent_fd)
 
 
 def parse_destination(url):

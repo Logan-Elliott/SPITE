@@ -54,8 +54,13 @@ receiver. It does not check EDR, SIEM, or agent process ancestry. Review those
 sources with the run ID and timestamps from the report.
 
 Run the cleanup command at the bottom of `RUNBOOK.md`. It lists unchanged files
-created by setup and asks before removing them. Changed, replaced, missing, and
-symlinked paths are kept.
+created by setup, prints every file eligible for removal, and asks before removing
+them. Changed, replaced, missing, and symlinked paths are kept. The authoritative
+cleanup record is stored in a private `.asrt-state` folder beside the workspace;
+editing the workspace copy does not add deletion targets.
+
+If setup stops after creating any files, it prints the same cleanup command. Run
+that command before retrying with a new workspace.
 
 ## Run the control tests
 

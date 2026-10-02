@@ -64,6 +64,44 @@ class OperatorTests(unittest.TestCase):
                          [(50000,8765,100,b"abc"),(50000,8765,101,b"xx")]]:
             with self.assertRaises(ValueError):op.tcp_streams(pcap(segments))
 
+    def test_cleanup_ignores_workspace_ledger_edits_and_lists_removals(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary).resolve();workspace=root/"workspace"
+            protected=root/"protected";protected.write_text("keep")
+            plan=root/"plan.json"
+            plan.write_text(json.dumps({"sample":["<workspace>/.env"]}))
+            args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True)
+            with patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(op.setup(args),0)
+            fake_entry=dict(path=str(protected),sha256=op.hashlib.sha256(protected.read_bytes()).hexdigest(),
+                            kind="seed",device=protected.stat().st_dev,inode=protected.stat().st_ino)
+            reference=json.loads((workspace/"ownership.json").read_text())
+            reference["files"]=[fake_entry]
+            (workspace/"ownership.json").write_text(json.dumps(reference))
+            output=io.StringIO()
+            with contextlib.redirect_stdout(output):
+                op.cleanup(argparse.Namespace(workspace=str(workspace),apply=True))
+            self.assertEqual(protected.read_text(),"keep")
+            self.assertFalse((workspace/".env").exists())
+            self.assertIn(str(workspace/".env"),output.getvalue())
+            self.assertNotIn(str(protected),output.getvalue())
+
+    def test_failed_setup_keeps_a_working_cleanup_record(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary).resolve();workspace=root/"workspace"
+            plan=root/"plan.json"
+            plan.write_text(json.dumps({"sample":["<workspace>/.env"]}))
+            args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True)
+            with patch.object(op.os,"geteuid",return_value=501), \
+                 patch.object(op.shutil,"copytree",side_effect=OSError("copy failed")), \
+                 contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()), \
+                 self.assertRaisesRegex(OSError,"copy failed"):
+                op.setup(args)
+            self.assertTrue((workspace/".env").exists())
+            with contextlib.redirect_stdout(io.StringIO()):
+                op.cleanup(argparse.Namespace(workspace=str(workspace),apply=True))
+            self.assertFalse((workspace/".env").exists())
+
     def test_verify_real_runner_artifacts_and_empty_pcap(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary).resolve();run=root/"run";run.mkdir()

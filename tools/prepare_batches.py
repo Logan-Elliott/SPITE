@@ -19,7 +19,7 @@ def load_runner():
     return module
 
 
-def prepare(plan, workspace, output, source="synthetic"):
+def prepare(plan, workspace, output, source="synthetic", record_created=None):
     if source not in ("synthetic", "real"):
         raise ValueError("Harvest source must be synthetic or real")
     workspace = Path(workspace).resolve(strict=True)
@@ -88,6 +88,8 @@ def prepare(plan, workspace, output, source="synthetic"):
                     if event == "created":
                         # Hash the known bytes just written; never read existing targets.
                         entries.append(dict(path=str(path), sha256=digest))
+                        if record_created:
+                            record_created(path, digest)
             if entries:
                 manifest = dict(exercise="ASRT-001", source=source, files=entries)
                 if source == "synthetic":

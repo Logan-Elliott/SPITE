@@ -12,6 +12,7 @@ import re
 import shutil
 import shlex
 import signal
+import stat
 import struct
 import subprocess
 import sys
@@ -96,6 +97,65 @@ def dump(path, value):
     with Path(path).open("x", encoding="utf-8") as stream:
         json.dump(value, stream, indent=2)
         stream.write("\n")
+
+
+def replace_json(path, value):
+    """Atomically replace private state without exposing a partly written file."""
+    path = Path(path)
+    temporary = path.with_name(path.name + ".new-" + hashlib.sha256(os.urandom(32)).hexdigest()[:12])
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def create_cleanup_state(workspace):
+    state_root = workspace.parent / ".asrt-state"
+    if state_root.is_symlink():
+        raise ValueError("Cleanup state directory cannot be a symlink: " + str(state_root))
+    state_root.mkdir(mode=0o700, exist_ok=True)
+    if not state_root.is_dir():
+        raise ValueError("Cleanup state path must be a directory: " + str(state_root))
+    state_id = hashlib.sha256(os.urandom(32)).hexdigest()
+    state_path = state_root / (state_id + ".json")
+    state = {"schema_version": 2, "workspace": str(workspace), "files": []}
+    replace_json(state_path, state)
+    return state_id, state_path, state
+
+
+def unlink_owned_file(entry):
+    """Remove one unchanged file while holding its physical parent directory."""
+    path = Path(entry["path"])
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    parent_fd = os.open(path.anchor, directory_flags)
+    try:
+        for component in path.parts[1:-1]:
+            next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = next_fd
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
+                raise ValueError("Expected an unchanged regular file")
+            content = stream.read(65537)
+        if (info.st_dev, info.st_ino) != (entry["device"], entry["inode"]):
+            raise ValueError("File identity changed")
+        if len(content) > 65536 or hashlib.sha256(content).hexdigest() != entry["sha256"]:
+            raise ValueError("Contents changed")
+        current = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
+            raise ValueError("File changed during cleanup")
+        os.unlink(path.name, dir_fd=parent_fd)
+    finally:
+        os.close(parent_fd)
 
 
 def module_from(path, name):
@@ -297,16 +357,50 @@ def setup(args):
             return 0
     workspace.mkdir(mode=0o700)
     (workspace / "evidence").mkdir(mode=0o700)
+    state_id, state_path, cleanup_state = create_cleanup_state(workspace)
+    workspace_ledger = workspace / "ownership.json"
+    dump(workspace_ledger, dict(schema_version=2, workspace=str(workspace),
+                               state_id=state_id, files=[]))
+
+    def record_owned(path, digest, kind):
+        info = Path(path).lstat()
+        entry = dict(path=str(path), sha256=digest, kind=kind,
+                     device=info.st_dev, inode=info.st_ino)
+        cleanup_state["files"].append(entry)
+        replace_json(state_path, cleanup_state)
+        replace_json(workspace_ledger, dict(schema_version=2, workspace=str(workspace),
+                                            state_id=state_id, files=cleanup_state["files"]))
+
     # Keep a setup identity even if a later step fails.
     dump(workspace / "preparation.json", dict(started_utc=utc(),user_uid=os.getuid(),
          interpreter=sys.executable,plan=str(plan_path) if variant_name == "main" else None,
          phase="preparation",evidence_profile=profile,destination=destination_url,harvest=source,
-         target_profile=target["id"],target_profile_source=str(target_path)))
+         target_profile=target["id"],target_profile_source=str(target_path),cleanup_state_id=state_id))
     dump(workspace / "target-profile.json", target)
-    summary, failed = prepare(plan, workspace, workspace / "batches", source=source) if variant_name == "main" else ({}, False)
+    try:
+        summary, failed = prepare(
+            plan, workspace, workspace / "batches", source=source,
+            record_created=lambda path, digest: record_owned(path, digest, "seed")
+        ) if variant_name == "main" else ({}, False)
+    except Exception:
+        print("Setup stopped after creating the workspace. Review and clean it with:", file=sys.stderr)
+        print("  " + shlex.join([str(CLI), "clean", str(workspace)]), file=sys.stderr)
+        raise
     destination = workspace / target["install_path"]
     destination.parent.mkdir(parents=True)
-    shutil.copytree(variant_source, destination, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+
+    def copy_and_record(source_path, destination_path):
+        copied = shutil.copy2(source_path, destination_path)
+        record_owned(copied, hashlib.sha256(Path(copied).read_bytes()).hexdigest(), "installed-skill")
+        return copied
+
+    try:
+        shutil.copytree(variant_source, destination, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+                        copy_function=copy_and_record)
+    except Exception:
+        print("Setup stopped after creating files. Review and clean them with:", file=sys.stderr)
+        print("  " + shlex.join([str(CLI), "clean", str(workspace)]), file=sys.stderr)
+        raise
     runner = module_from(SKILL / "scripts/preflight.py", "validation_only")
     owned = []
     manifests = []
@@ -319,14 +413,9 @@ def setup(args):
                     failed = True
                 owned.append(dict(entry, kind=("selected" if source == "real" else "seed")))
             manifests.append(manifest)
-    # Record installation files separately; cleanup never recursively deletes.
-    for path in destination.rglob("*"):
-        if path.is_file():
-            owned.append(dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest(),kind="installed-skill"))
     for entry in owned:
-        info = Path(entry["path"]).lstat()
-        entry.update(device=info.st_dev,inode=info.st_ino)
-    dump(workspace / "ownership.json", dict(workspace=str(workspace),files=owned))
+        if entry["kind"] == "selected":
+            record_owned(entry["path"], entry["sha256"], "selected")
     local_receiver = (destination_parts is not None and destination_parts["scheme"] == "http"
                       and destination_parts["host"] in ("127.0.0.1", "localhost")
                       and destination_parts["port"] == 8765 and destination_parts["path"] == "/asrt")
@@ -634,11 +723,36 @@ def verify(args):
 def cleanup(args):
     workspace_value = getattr(args, "workspace_pos", None) or getattr(args, "workspace", None)
     workspace = ask_path(workspace_value,"Prepared workspace: ").resolve()
-    ledger = json.loads((workspace / "ownership.json").read_text())
+    reference = json.loads((workspace / "ownership.json").read_text())
+    if reference.get("schema_version") != 2 or not isinstance(reference.get("state_id"), str):
+        raise ValueError("This workspace uses an older cleanup record; review its ownership.json manually")
+    state_id = reference["state_id"]
+    if not re.fullmatch(r"[0-9a-f]{64}", state_id):
+        raise ValueError("Invalid cleanup state identifier")
+    state_path = workspace.parent / ".asrt-state" / (state_id + ".json")
+    ledger = json.loads(state_path.read_text())
+    if ledger.get("schema_version") != 2 or ledger.get("workspace") != str(workspace):
+        raise ValueError("Cleanup state does not belong to this workspace")
+    if not isinstance(ledger.get("files"), list):
+        raise ValueError("Cleanup state has an invalid file list")
     runner = module_from(SKILL / "scripts/preflight.py","cleanup_reader")
     results = []
+    seen = set()
     for entry in ledger["files"]:
+        required = {"path", "sha256", "kind", "device", "inode"}
+        if not isinstance(entry, dict) or not required.issubset(entry):
+            raise ValueError("Cleanup state contains an invalid file entry")
         path = Path(entry["path"])
+        if str(path) in seen:
+            raise ValueError("Cleanup state contains a duplicate path: " + str(path))
+        seen.add(str(path))
+        if entry["kind"] == "installed-skill":
+            try:
+                path.relative_to(workspace)
+            except ValueError:
+                raise ValueError("Installed skill path is outside the workspace: " + str(path))
+        elif entry["kind"] not in ("seed", "selected"):
+            raise ValueError("Cleanup state contains an unknown file kind")
         result = dict(path=str(path),action="preserved")
         if entry.get("kind") == "selected":
             result["reason"] = "existing file; never removed"
@@ -657,6 +771,10 @@ def cleanup(args):
     eligible = [result for result in results if result["action"] == "eligible"]
     preserved = [result for result in results if result["action"] != "eligible"]
     print("Cleanup found {} unchanged setup files and {} files to preserve.".format(len(eligible),len(preserved)))
+    if eligible:
+        print("Files eligible for removal:")
+        for result in eligible:
+            print("  " + result["path"])
     for result in preserved:
         print("  Preserve {}: {}".format(result["path"], result.get("reason", "not owned by setup")))
     approved = bool(getattr(args, "yes", False) or getattr(args, "apply", False))
@@ -664,13 +782,12 @@ def cleanup(args):
         approved = input("Remove the {} unchanged setup files? [y/N]: ".format(len(eligible))).strip().lower() in ("y","yes")
     if approved:
         for result in eligible:
-            path = Path(result["path"])
             entry = next(item for item in ledger["files"] if item["path"] == result["path"])
-            info = path.lstat()
-            if (info.st_dev,info.st_ino)!=(entry["device"],entry["inode"]) or hashlib.sha256(runner.read_fixture(path)).hexdigest()!=entry["sha256"]:
+            try:
+                unlink_owned_file(entry)
+            except (OSError, ValueError):
                 result.update(action="preserved",reason="File changed during cleanup")
                 continue
-            path.unlink()
             result["action"] = "removed"
         print("Removed {} files. Evidence and workspace folders were kept.".format(
             sum(result["action"] == "removed" for result in results)))

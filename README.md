@@ -33,6 +33,10 @@ create the workspace, shows any file paths outside that workspace, and
 asks once before writing files. It then creates `RUNBOOK.md` with the prompts,
 commands, and cleanup step.
 
+Setup keeps its authoritative cleanup record in a private `.asrt-state` folder
+beside the workspace. The copy inside the workspace is informational, so an
+agent cannot add deletion targets by editing it.
+
 Follow that runbook:
 
 1. Ask the agent to check workspace readiness without naming the skill.
