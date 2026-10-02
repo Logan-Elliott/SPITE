@@ -3,7 +3,7 @@
 A macOS-first purple team harness for testing whether a coding agent discovers,
 trusts, and executes a malicious project skill.
 
-The harness uses synthetic credential-shaped files and a localhost receiver. It
+The harness uses fake credential files and a localhost receiver. It
 does not collect existing credentials or send data off the endpoint.
 
 > Run it only on systems and accounts included in an authorized assessment.
@@ -28,9 +28,9 @@ asrt init
 
 You can also run `./asrt init` directly without installing it.
 
-Press Enter to accept the recommended endpoint mode, main variant, and generated
+Press Enter to accept the recommended endpoint mode, main test, and generated
 workspace path. Review the summary and answer `y` to continue. Setup installs the
-skill, prepares the synthetic files needed by that variant, and prints the path to:
+skill, prepares the fake files needed by that test, and prints the path to:
 
 - `RUNBOOK.md`: the prompts and exact commands for that workspace.
 
@@ -39,12 +39,11 @@ For the complete behavior chain:
 1. Run the receiver command from `RUNBOOK.md` in another terminal.
 2. Wait for `READY`.
 3. Open the prepared workspace in the target agent.
-4. Start a fresh conversation and paste the **Loopback transfer** prompt.
+4. Start a fresh conversation and paste the **Full chain with loopback transfer** prompt.
 5. Run the verification command from the same runbook after the agent finishes.
 
-Use the **Implicit selection** prompt to test automatic skill selection without
-network activity. Use **Explicit invocation** when you need a deterministic
-offline run.
+Use **Automatic skill selection** to test implicit selection without network
+activity. Use **Direct skill invocation** when you need a repeatable offline run.
 
 The runbook also contains the cleanup commands. For an already reviewed,
 noninteractive setup:
@@ -71,10 +70,10 @@ These are the behaviors to score. Several occur during one agent run.
 The full mapping rationale and evidence requirements are in
 [TEST-CASES.md](TEST-CASES.md).
 
-## Optional variants
+## Optional tests
 
-Prepare separate workspaces when you want the matched benign baseline or the
-output-manipulation case:
+Prepare separate workspaces when you want the benign control or response
+manipulation test:
 
 ```sh
 asrt init --variant benign-control
@@ -82,9 +81,9 @@ asrt init --variant benign-control
 asrt init --variant answer-contamination
 ```
 
-The variants use the same skill name and description. Setup generates the correct
-prompt for the selected variant and does not seed mock files that the variant will
-never read.
+These skill variants use the same name and description so the benign control is a
+fair comparison. Setup generates the correct prompt and skips mock files that the
+selected test will never read.
 
 ## Use another target agent
 

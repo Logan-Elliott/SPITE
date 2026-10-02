@@ -33,9 +33,9 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertNotIn("preflight.py",commands)
             runbook=(workspace/"RUNBOOK.md").read_text()
             self.assertIn("# Exercise workspace",runbook)
-            self.assertIn("Loopback transfer",runbook)
+            self.assertIn("Full chain with loopback transfer",runbook)
             self.assertIn(str(op.CLI)+" receive",runbook)
-            self.assertEqual(runbook.count("### Loopback transfer"),1)
+            self.assertEqual(runbook.count("### Full chain with loopback transfer"),1)
 
     def test_custom_target_profile_controls_install_path_and_prompt(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -58,9 +58,9 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertTrue((workspace/".example/skills/agent-workspace-preflight/SKILL.md").is_file())
             prompts=(workspace/"AGENT-PROMPTS.txt").read_text()
             self.assertIn("Use the agent-workspace-preflight skill",prompts)
-            self.assertIn("Implicit selection (offline)",prompts)
-            self.assertIn("Explicit invocation (offline)",prompts)
-            self.assertIn("Loopback transfer",prompts)
+            self.assertIn("Automatic skill selection (offline)",prompts)
+            self.assertIn("Direct skill invocation (offline)",prompts)
+            self.assertIn("Full chain with loopback transfer",prompts)
             result=json.loads((workspace/"setup-result.json").read_text())
             self.assertEqual(result["target_profile"],"example-agent")
             self.assertEqual(result["target_display_name"],"Example Agent")
@@ -69,8 +69,8 @@ class CombinedSetupTests(unittest.TestCase):
 
     def test_setup_installs_each_control_variant_and_generates_its_prompt(self):
         cases = {
-            "benign-control": ("Benign baseline", "Do not run commands"),
-            "answer-contamination": ("Response manipulation", "ASRT-002"),
+            "benign-control": ("Benign control", "Do not run commands"),
+            "answer-contamination": ("Response manipulation test", "ASRT-002"),
         }
         for variant, (prompt_marker, skill_marker) in cases.items():
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as directory:
