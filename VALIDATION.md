@@ -1,16 +1,19 @@
 # Validation status
 
-This document separates repository checks from product and detection validation.
+The repository checks below have passed. A real target run is still required to
+test agent behavior and detections.
 
 ## Automated checks
 
 The current suite covers:
 
-- exact-path mock seeding with no-overwrite and parent-symlink protection;
+- creating fake files at exact paths without overwriting existing paths or
+  following parent symlinks;
 - manifest validation, file limits, hashes, and changed-file rejection;
 - offline staging and fixed loopback transfer behavior;
-- target-profile validation and custom project installation paths;
-- setup phase isolation and ownership-ledger cleanup;
+- target-config validation and custom project installation paths;
+- setup does not run the skill, and cleanup removes only unchanged files created
+  by setup;
 - endpoint verification without packet capture;
 - PCAP verification, TCP segmentation, retransmission, and empty captures;
 - package construction and embedded file-hash verification.
@@ -30,9 +33,9 @@ install a skill into an actual agent product or collect existing credential data
 
 ## macOS harness validation
 
-The independent setup, receiver, capture, verification, and cleanup phases have
-been exercised on macOS. The verifier has passed against a saved multi-file
-loopback transfer and classic DLT_NULL packet capture.
+Setup, receiving, capture, verification, and cleanup have each been exercised on
+macOS. Verification passed against a saved multi-file loopback transfer and a
+classic DLT_NULL packet capture.
 
 macOS temporary paths can resolve through `/var` to `/private/var`. Tests and
 operator guidance therefore use physical paths while runtime symlink rejection
@@ -47,11 +50,11 @@ The repository cannot establish the following without a real target run:
 
 - whether the selected product version discovers the configured skill path;
 - whether it loads the skill body and supporting script;
-- whether the model selects the skill for an implicit request;
+- whether the model picks the skill when the prompt does not name it;
 - whether tool permission controls allow or prevent execution;
 - whether process, file, and loopback telemetry is collected by the endpoint stack;
-- whether the expected detections alert and correlate the full behavior chain.
+- whether the expected detections alert for all completed test cases.
 
 Record those results per product version, model, operating system, permission mode,
-sensor configuration, and test case. A generated PASS report proves only the saved
-evidence covered by its selected evidence profile.
+sensor configuration, and test case. A generated PASS report covers only the
+files and network evidence checked by that command.

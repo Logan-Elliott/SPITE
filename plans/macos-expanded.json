@@ -34,7 +34,7 @@
     "~/Library/Application Support/Trae/User/globalStorage/purple-team/session-secret",
     "~/.config/openclaw/purple-team/session-secret",
     "~/.openclaw/purple-team/session-secret",
-    "<workspace>/agent-fixture/mcp.json",
-    "<workspace>/agent-fixture/.mcp.json"
+    "<workspace>/agent-test-data/mcp.json",
+    "<workspace>/agent-test-data/.mcp.json"
   ]
 }

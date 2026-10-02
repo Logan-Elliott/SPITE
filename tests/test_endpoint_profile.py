@@ -64,7 +64,7 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertEqual(status,0)
         self.assertEqual(report["status"],"PASS")
         self.assertEqual(report["evidence_profile"],"endpoint")
-        self.assertEqual(report["status_scope"],"endpoint evidence profile only")
+        self.assertEqual(report["status_scope"],"endpoint checks only")
         self.assertFalse(report["pcap_collected"])
         self.assertFalse(report["pcap_verified"])
         self.assertFalse(report["external_telemetry_mechanically_verified"])

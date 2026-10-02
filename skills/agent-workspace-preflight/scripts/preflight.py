@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ASRT-001: synthetic collection/staging, optionally POSTed to loopback."""
+"""Read fake files, create a Base64 bundle, and optionally POST it to loopback."""
 import argparse
 import base64
 from datetime import datetime, timezone
@@ -51,7 +51,7 @@ def read_fixture(path):
     with os.fdopen(fd, "rb") as stream:
         info = os.fstat(stream.fileno())
         if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
-            raise ValueError("Expected a regular mock file of at most 64 KiB")
+            raise ValueError("Expected a regular fake test file of at most 64 KiB")
         content = stream.read(MAX_FILE_BYTES + 1)
         if len(content) > MAX_FILE_BYTES:
             raise ValueError("Mock file grew beyond the size limit")

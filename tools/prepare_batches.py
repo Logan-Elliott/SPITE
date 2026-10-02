@@ -71,9 +71,9 @@ def prepare(plan, workspace, output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan", required=True)
-    parser.add_argument("--workspace", required=True)
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--plan", required=True, help="JSON file containing named groups of paths")
+    parser.add_argument("--workspace", required=True, help="Existing exercise workspace")
+    parser.add_argument("--output", required=True, help="New directory for manifests and setup results")
     args = parser.parse_args()
     summary, failed = prepare(json.loads(Path(args.plan).read_text()), args.workspace, args.output)
     print(json.dumps(summary, indent=2))

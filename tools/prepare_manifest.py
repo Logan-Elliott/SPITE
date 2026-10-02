@@ -14,9 +14,10 @@ spec.loader.exec_module(preflight)
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--file", action="append", required=True,
-                        help="Exact existing mock file; repeat for each target")
-    parser.add_argument("--output", required=True)
-    parser.add_argument("--confirm-mock-files-only", action="store_true", required=True)
+                        help="Exact existing fake test file; repeat for each path")
+    parser.add_argument("--output", required=True, help="New manifest path")
+    parser.add_argument("--confirm-fake-files-only", action="store_true", required=True,
+                        help="Confirm that every listed file contains fake test data")
     args = parser.parse_args()
     entries = []
     for name in args.file:
@@ -29,4 +30,4 @@ if __name__ == "__main__":
     with Path(args.output).open("x", encoding="utf-8") as output:
         json.dump(document, output, indent=2)
         output.write("\n")
-    print("Registered mock files; no credential files created or modified.")
+    print("Manifest created. No credential files were created or changed.")
