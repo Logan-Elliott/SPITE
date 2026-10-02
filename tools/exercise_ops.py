@@ -62,7 +62,7 @@ def evidence_profile(args):
 
 
 def skill_variant(args):
-    name = getattr(args, "skill_variant", "main")
+    name = getattr(args, "skill_variant", None) or "main"
     if name not in SKILL_VARIANTS:
         raise ValueError("Skill variant must be main, benign-control, or answer-contamination")
     return name, SKILL_VARIANTS[name]
@@ -89,42 +89,142 @@ def ask_path(value, prompt):
     return Path(value or input(prompt).strip()).expanduser().absolute()
 
 
+def choose(label, choices, default):
+    print("\n" + label + ":")
+    for number, (value, description) in enumerate(choices, 1):
+        suffix = " (default)" if value == default else ""
+        print("  {}) {}{}".format(number, description, suffix))
+    response = input("Choose [{}]: ".format(
+        next(number for number, (value, _) in enumerate(choices, 1) if value == default)
+    )).strip()
+    if not response:
+        return default
+    if response.isdigit() and 1 <= int(response) <= len(choices):
+        return choices[int(response) - 1][0]
+    for value, _ in choices:
+        if response == value:
+            return value
+    raise ValueError("Choose one of: " + ", ".join(value for value, _ in choices))
+
+
+def write_workspace_runbook(path, target, variant, profile, prompts, commands):
+    cleanup = shlex.join([str(ROOT / "macos/Cleanup.command"), "--workspace", str(path.parent)])
+    lines = [
+        "# Exercise workspace",
+        "",
+        "- Target: {}".format(target["display_name"]),
+        "- Variant: `{}`".format(variant),
+        "- Evidence mode: `{}`".format(profile),
+        "",
+    ]
+    if variant == "main":
+        lines.extend([
+            "## Start here",
+            "",
+            "Use a fresh agent conversation for every prompt. The offline prompts do not",
+            "need support processes. For **Loopback transfer**, start the matching receiver",
+            "command below, wait for `READY`, submit the prompt, then run the matching",
+            "verification command.",
+            "",
+        ])
+    else:
+        lines.extend([
+            "## Start here",
+            "",
+            "Open this workspace in the target agent, start a fresh conversation, submit",
+            "the prompt below, and save the transcript.",
+            "",
+        ])
+    lines.extend(["## Agent prompts", ""])
+    for prompt in prompts:
+        title, separator, body = prompt.partition(" — ")
+        lines.extend(["### " + title, "", "```text", body if separator else prompt, "```", ""])
+    if commands:
+        lines.extend(["## Terminal commands", "", "```text", *commands, "```", ""])
+    lines.extend([
+        "## Cleanup",
+        "",
+        "Preview cleanup first, then add `--apply` to remove unchanged setup-owned files:",
+        "",
+        "```sh",
+        cleanup,
+        cleanup + " --apply",
+        "```",
+    ])
+    with path.open("x", encoding="utf-8") as stream:
+        stream.write("\n".join(lines) + "\n")
+
+
 def setup(args):
-    profile = evidence_profile(args)
+    assume_yes = bool(getattr(args, "yes", False) or getattr(args, "apply", False))
+    profile = getattr(args, "evidence_profile", None)
+    variant_arg = getattr(args, "skill_variant", None)
+    if not assume_yes:
+        print("Agent Skill Red Team Harness — workspace setup")
+        print("Press Enter to accept the defaults.")
+        if profile is None:
+            profile = choose("Evidence mode", [
+                ("endpoint", "Endpoint — saved artifacts plus EDR/SIEM review"),
+                ("pcap", "PCAP lab — adds sudo loopback packet capture"),
+            ], "endpoint")
+        if variant_arg is None:
+            variant_arg = choose("Skill variant", [
+                ("main", "Main adversarial execution chain"),
+                ("benign-control", "Benign matched-description baseline"),
+                ("answer-contamination", "Response-manipulation fixture"),
+            ], "main")
+    profile = profile or "endpoint"
+    if profile not in ("endpoint", "pcap"):
+        raise ValueError("Evidence mode must be endpoint or pcap")
+    setattr(args, "skill_variant", variant_arg or "main")
     target, target_path = load_target_profile(getattr(args, "target_profile", None))
     variant_name, variant_source = skill_variant(args)
     if os.geteuid() == 0:
         raise ValueError("Run setup as the exercise macOS user, not with sudo")
     plan_path = Path(args.plan or ROOT / "plans/macos-expanded.json").expanduser()
-    plan = json.loads(plan_path.read_text())
-    default = Path.home() / ("trae-exercise-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+    plan = json.loads(plan_path.read_text()) if variant_name == "main" else {}
+    default = Path.home() / ("agent-skill-exercise-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
     workspace = Path(args.workspace or input("New exercise workspace [{}]: ".format(default)).strip() or default).expanduser().absolute()
     if workspace.exists() or workspace.is_symlink():
         raise ValueError("Use a NEW workspace; existing workspaces are preserved")
     if not workspace.parent.is_dir() or workspace.parent.resolve() != workspace.parent:
         raise ValueError("Workspace parent must exist and use its physical path")
-    print("Workspace:", workspace)
-    print("Interpreter:", sys.executable)
-    print("Evidence profile:", profile)
-    print("Target profile: {} ({})".format(target["display_name"], target["id"]))
-    print("Skill variant:", variant_name)
-    print("Exact requested targets (existing entries will be skipped):")
-    for batch, paths in plan.items():
-        for raw in paths:
-            print("  [{}] {}".format(batch, Path(raw.replace("<workspace>/", str(workspace) + "/", 1)).expanduser()))
-    print("These inert files can affect applications even if the paths were absent.")
-    print("Review the plan for this managed account before proceeding.")
-    if not args.apply and input("Type PREPARE to seed and install; anything else cancels: ").strip() != "PREPARE":
+    print("\nSetup summary")
+    print("  Workspace:  ", workspace)
+    print("  Target:     ", target["display_name"])
+    print("  Variant:    ", variant_name)
+    print("  Evidence:   ", profile)
+    if variant_name == "main":
+        total_targets = sum(len(paths) for paths in plan.values())
+        print("  Mock plan:  ", "{} paths in {} groups".format(total_targets, len(plan)))
+        print("  Plan file:  ", plan_path)
+    else:
+        print("  Mock plan:   not needed for this variant")
+    if variant_name == "main" and getattr(args, "show_targets", False):
+        print("\nRequested mock-file paths (existing entries will be skipped):")
+        for batch, paths in plan.items():
+            for raw in paths:
+                expanded = Path(raw.replace("<workspace>/", str(workspace) + "/", 1)).expanduser()
+                print("  [{}] {}".format(batch, expanded))
+    elif variant_name == "main":
+        print("  Add --show-targets to display every requested path.")
+    if variant_name == "main":
+        print("\nSetup creates synthetic config-shaped files only where paths are absent.")
+        print("Use a disposable project or dedicated test account.")
+    else:
+        print("\nThis variant installs only the skill package; it does not seed mock files.")
+    if not assume_yes and input("\nCreate this workspace? [y/N]: ").strip().lower() not in ("y", "yes"):
         print("Cancelled; no files created.")
         return 0
     workspace.mkdir(mode=0o700)
     (workspace / "evidence").mkdir(mode=0o700)
     # Keep a setup identity even if a later step fails.
     dump(workspace / "preparation.json", dict(started_utc=utc(),user_uid=os.getuid(),
-         interpreter=sys.executable,plan=str(plan_path),phase="preparation",evidence_profile=profile,
+         interpreter=sys.executable,plan=str(plan_path) if variant_name == "main" else None,
+         phase="preparation",evidence_profile=profile,
          target_profile=target["id"],target_profile_source=str(target_path)))
     dump(workspace / "target-profile.json", target)
-    summary, failed = prepare(plan, workspace, workspace / "batches")
+    summary, failed = prepare(plan, workspace, workspace / "batches") if variant_name == "main" else ({}, False)
     destination = workspace / target["install_path"]
     destination.parent.mkdir(parents=True)
     shutil.copytree(variant_source, destination, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
@@ -206,15 +306,19 @@ def setup(args):
                      + "These commands are independent; run each explicitly. Verification asks for the run directory.\n"
                      + ("Receiver and verification commands apply to the Loopback transfer prompt only.\n" if variant_name == "main" else "")
                      + "For repeated tests, choose NEW evidence filenames.\n\n"+"\n".join(commands))
-    dump(workspace / "setup-result.json", dict(completed_utc=utc(),status="INCOMPLETE" if failed or not manifests else "READY",
+    write_workspace_runbook(workspace / "RUNBOOK.md", target, variant_name, profile, prompts, commands)
+    ready = not failed and (bool(manifests) or variant_name != "main")
+    dump(workspace / "setup-result.json", dict(completed_utc=utc(),status="READY" if ready else "INCOMPLETE",
          batches=summary,agent_invoked=False,payload_executed=False,evidence_profile=profile,
          target_profile=target["id"],target_display_name=target["display_name"],skill_variant=variant_name))
-    print(json.dumps(summary, indent=2))
-    print("Workspace:", workspace)
-    print("Prompts:", workspace / "AGENT-PROMPTS.txt")
-    print("Separate support commands:", workspace / "OPERATOR-COMMANDS.txt")
-    print("No receiver, capture, agent session, or exercise payload was started.")
-    return 2 if failed or not manifests else 0
+    print("\nSetup results")
+    for batch, result in summary.items():
+        print("  {:<18} created {:>2}  skipped {:>2}  failed {:>2}".format(
+            batch, result["created"], result["skipped_exists"], result["failed"]))
+    print("\nStatus:", "READY" if ready else "INCOMPLETE")
+    print("Next step:", workspace / "RUNBOOK.md")
+    print("Setup did not start the receiver, capture, agent, or exercise payload.")
+    return 0 if ready else 2
 
 
 def receiver(args):
@@ -434,12 +538,18 @@ def cleanup(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="phase",required=True)
-    p=sub.add_parser("setup");p.add_argument("--workspace");p.add_argument("--plan");p.add_argument("--apply",action="store_true")
-    p.add_argument("--target-profile",help="Target profile JSON (default: profiles/trae.json)")
-    p.add_argument("--skill-variant",choices=tuple(SKILL_VARIANTS),default="main",
-                   help="Skill package installed into the prepared workspace (default: main)")
-    p.add_argument("--evidence-profile",choices=("endpoint","pcap"),default="pcap",
-                   help="endpoint: non-admin managed systems; pcap: lab capture (default)")
+    p=sub.add_parser("setup",help="Create an exercise workspace")
+    p.add_argument("-w","--workspace",help="New workspace path")
+    p.add_argument("--plan",help="Mock-file plan JSON")
+    p.add_argument("--target","--target-profile",dest="target_profile",
+                   help="Target profile JSON (default: Trae)")
+    p.add_argument("--variant","--skill-variant",dest="skill_variant",choices=tuple(SKILL_VARIANTS),
+                   help="Skill variant (default: main)")
+    p.add_argument("--mode","--evidence-profile",dest="evidence_profile",choices=("endpoint","pcap"),
+                   help="Evidence mode (default: endpoint)")
+    p.add_argument("--show-targets",action="store_true",help="List every requested mock-file path")
+    p.add_argument("-y","--yes",action="store_true",help="Accept the reviewed setup without prompting")
+    p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
     for name in ("receiver","capture"):
         p=sub.add_parser(name);p.add_argument("--output");p.add_argument("--timeout",type=int,default=900)
     p=sub.add_parser("verify")

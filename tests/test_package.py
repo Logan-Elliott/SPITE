@@ -17,8 +17,10 @@ class CombinedSetupTests(unittest.TestCase):
             plan=root/"plan.json"
             plan.write_text(json.dumps({"one":["<workspace>/first"],"two":["<workspace>/second"]}))
             workspace=root/"workspace"
+            args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
+                                    evidence_profile="pcap")
             with patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(op.setup(argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True)),0)
+                self.assertEqual(op.setup(args),0)
             combined=json.loads((workspace/"all-prepared.json").read_text())
             self.assertEqual(len(combined["files"]),2)
             ledger=json.loads((workspace/"ownership.json").read_text())
@@ -29,6 +31,10 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertIn("Packet-Capture.command",commands)
             self.assertIn("Verify.command",commands)
             self.assertNotIn("preflight.py",commands)
+            runbook=(workspace/"RUNBOOK.md").read_text()
+            self.assertIn("# Exercise workspace",runbook)
+            self.assertIn("Loopback transfer",runbook)
+            self.assertIn("HTTP-Receiver.command",runbook)
 
     def test_custom_target_profile_controls_install_path_and_prompt(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -80,6 +86,28 @@ class CombinedSetupTests(unittest.TestCase):
                 self.assertIn(prompt_marker,(workspace/"AGENT-PROMPTS.txt").read_text())
                 result=json.loads((workspace/"setup-result.json").read_text())
                 self.assertEqual(result["skill_variant"],variant)
+                self.assertEqual(result["status"],"READY")
+                self.assertFalse((workspace/"batches").exists())
+
+    def test_guided_setup_uses_safe_defaults_and_writes_runbook(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve()
+            plan=root/"plan.json"
+            plan.write_text(json.dumps({"sample":["<workspace>/fixture"]}))
+            workspace=root/"workspace"
+            args=argparse.Namespace(plan=str(plan),workspace=None,apply=False,yes=False,
+                                    target_profile=None,evidence_profile=None,
+                                    skill_variant=None,show_targets=False)
+            answers=["", "", str(workspace), "yes"]
+            output=io.StringIO()
+            with patch("builtins.input",side_effect=answers), \
+                 patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(output):
+                self.assertEqual(op.setup(args),0)
+            result=json.loads((workspace/"setup-result.json").read_text())
+            self.assertEqual(result["evidence_profile"],"endpoint")
+            self.assertEqual(result["skill_variant"],"main")
+            self.assertTrue((workspace/"RUNBOOK.md").is_file())
+            self.assertIn("Next step:",output.getvalue())
 
     def test_target_profile_rejects_traversal_and_extra_fields(self):
         with tempfile.TemporaryDirectory() as directory:
