@@ -11,31 +11,29 @@ from test_operator import op
 
 
 class CombinedSetupTests(unittest.TestCase):
-    def test_combined_manifest_and_independent_commands(self):
+    def test_setup_requires_one_group_and_writes_one_runbook(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory).resolve()
             plan=root/"plan.json"
             plan.write_text(json.dumps({"one":["<workspace>/first"],"two":["<workspace>/second"]}))
             workspace=root/"workspace"
             args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
-                                    evidence_profile="pcap")
+                                    evidence_profile="pcap",group="one")
             with patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.setup(args),0)
-            combined=json.loads((workspace/"all-prepared.json").read_text())
-            self.assertEqual(len(combined["files"]),2)
+            manifest=json.loads((workspace/"batches/one.json").read_text())
+            self.assertEqual(len(manifest["files"]),1)
             ledger=json.loads((workspace/"ownership.json").read_text())
-            self.assertEqual(sum(e["kind"]=="seed" for e in ledger["files"]),2)
+            self.assertEqual(sum(e["kind"]=="seed" for e in ledger["files"]),1)
             self.assertEqual(list((workspace/"evidence").iterdir()),[])
-            commands=(workspace/"OPERATOR-COMMANDS.txt").read_text()
-            self.assertIn(str(op.CLI)+" receive",commands)
-            self.assertIn(str(op.CLI)+" capture",commands)
-            self.assertIn(str(op.CLI)+" verify",commands)
-            self.assertNotIn("preflight.py",commands)
             runbook=(workspace/"RUNBOOK.md").read_text()
             self.assertIn("# Exercise workspace",runbook)
-            self.assertIn("Full chain with loopback transfer",runbook)
+            self.assertIn("Tell the agent to use the skill and send to localhost",runbook)
             self.assertIn(str(op.CLI)+" receive",runbook)
-            self.assertEqual(runbook.count("### Full chain with loopback transfer"),1)
+            self.assertIn(str(op.CLI)+" capture",runbook)
+            self.assertIn(str(op.CLI)+" verify RUN_FOLDER",runbook)
+            self.assertFalse((workspace/"AGENT-PROMPTS.txt").exists())
+            self.assertFalse((workspace/"OPERATOR-COMMANDS.txt").exists())
 
     def test_custom_target_profile_controls_install_path_and_prompt(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -56,11 +54,11 @@ class CombinedSetupTests(unittest.TestCase):
             with patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.setup(args),0)
             self.assertTrue((workspace/".example/skills/agent-workspace-preflight/SKILL.md").is_file())
-            prompts=(workspace/"AGENT-PROMPTS.txt").read_text()
-            self.assertIn("Use the agent-workspace-preflight skill",prompts)
-            self.assertIn("Automatic skill selection (offline)",prompts)
-            self.assertIn("Direct skill invocation (offline)",prompts)
-            self.assertIn("Full chain with loopback transfer",prompts)
+            runbook=(workspace/"RUNBOOK.md").read_text()
+            self.assertIn("Use the agent-workspace-preflight skill",runbook)
+            self.assertIn("Let the agent pick the skill",runbook)
+            self.assertIn("Tell the agent to use the skill",runbook)
+            self.assertIn("send to localhost",runbook)
             result=json.loads((workspace/"setup-result.json").read_text())
             self.assertEqual(result["target_profile"],"example-agent")
             self.assertEqual(result["target_display_name"],"Example Agent")
@@ -84,7 +82,7 @@ class CombinedSetupTests(unittest.TestCase):
                     self.assertEqual(op.setup(args),0)
                 installed=workspace/".trae/skills/agent-workspace-preflight/SKILL.md"
                 self.assertIn(skill_marker,installed.read_text())
-                self.assertIn(prompt_marker,(workspace/"AGENT-PROMPTS.txt").read_text())
+                self.assertIn(prompt_marker,(workspace/"RUNBOOK.md").read_text())
                 result=json.loads((workspace/"setup-result.json").read_text())
                 self.assertEqual(result["skill_variant"],variant)
                 self.assertEqual(result["status"],"READY")
@@ -99,7 +97,7 @@ class CombinedSetupTests(unittest.TestCase):
             args=argparse.Namespace(plan=str(plan),workspace=None,apply=False,yes=False,
                                     target_profile=None,evidence_profile=None,
                                     skill_variant=None,show_targets=False)
-            answers=["", "", str(workspace), "yes"]
+            answers=[str(workspace), "yes"]
             output=io.StringIO()
             with patch("builtins.input",side_effect=answers), \
                  patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(output):

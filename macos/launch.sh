@@ -15,6 +15,11 @@ if [[ -z "$exercise_python" ]]; then
   exit 1
 fi
 if [[ "$phase" == capture ]]; then
+  for argument in "$@"; do
+    if [[ "$argument" == -h || "$argument" == --help ]]; then
+      exec "$exercise_python" "$package_root/tools/exercise_ops.py" "$phase" "$@"
+    fi
+  done
   exec sudo "$exercise_python" "$package_root/tools/exercise_ops.py" "$phase" "$@"
 fi
 exec "$exercise_python" "$package_root/tools/exercise_ops.py" "$phase" "$@"

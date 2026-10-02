@@ -13,8 +13,8 @@ Usage:
   asrt receive [options]    Start the one-request localhost receiver
   asrt verify [options]     Verify saved exercise evidence
   asrt capture [options]    Capture loopback traffic for a PCAP lab run
-  asrt clean [options]      Preview or apply workspace cleanup
-  asrt install              Add this checkout to ~/.local/bin
+  asrt clean [options]      Remove unchanged files created by setup
+  asrt install              Install the command in ~/.local/bin
   asrt version              Print the installed version
   asrt help                 Show this help
 
@@ -48,7 +48,7 @@ case "$command_name" in
     ln -s "$script_path" "$target"
     print "Installed: $target"
     if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
-      print "Add this directory to PATH before using bare 'asrt': $bin_dir"
+      print "Add this line to your shell configuration, then open a new terminal:"
       print "  export PATH=\"$bin_dir:\$PATH\""
     else
       print "Run: asrt init"

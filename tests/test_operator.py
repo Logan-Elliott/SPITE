@@ -45,7 +45,7 @@ class OperatorTests(unittest.TestCase):
             self.assertTrue((workspace/".trae/skills/agent-workspace-preflight/scripts/preflight.py").is_file())
             self.assertFalse(list(workspace.glob("**/diagnostics.b64")))
             changed=workspace/"other";changed.write_text("modified after setup")
-            with contextlib.redirect_stdout(io.StringIO()):
+            with patch("builtins.input",return_value="n"),contextlib.redirect_stdout(io.StringIO()):
                 op.cleanup(argparse.Namespace(workspace=str(workspace),apply=False))
             self.assertTrue((workspace/".env").is_file())
             with contextlib.redirect_stdout(io.StringIO()):
@@ -83,7 +83,7 @@ class OperatorTests(unittest.TestCase):
             request=headers+body
             capture=root/"traffic.pcap"
             capture.write_bytes(pcap([(50000,8765,100,request[:80]),(50000,8765,180,request[80:]),(8765,50000,200,b"HTTP/1.0 204 No Content\r\n\r\n")]))
-            args=argparse.Namespace(run=str(run),manifest=str(manifest),receipt=str(receipt),pcap=str(capture),output=str(root/"report.json"))
+            args=argparse.Namespace(run=str(run),manifest=str(manifest),receipt=str(receipt),pcap=str(capture),output=str(root/"report.json"),evidence_profile="pcap")
             # Prove verification never invokes fixture reads.
             with patch.object(runner,"read_fixture",side_effect=AssertionError("No hotspot reads")),contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.verify(args),0)

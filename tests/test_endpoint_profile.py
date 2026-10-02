@@ -149,21 +149,18 @@ class EndpointProfileTests(unittest.TestCase):
              patch.object(op.subprocess,"Popen",side_effect=AssertionError("No sudo/tcpdump/processes")), \
              contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(op.setup(args),0)
-        commands=(workspace/"OPERATOR-COMMANDS.txt").read_text()
+        commands=(workspace/"RUNBOOK.md").read_text()
         for forbidden in (str(op.CLI)+" capture","--pcap","sudo","tcpdump"):
             self.assertNotIn(forbidden,commands)
         self.assertIn(str(op.CLI)+" receive",commands)
-        self.assertIn(str(op.CLI)+" verify --mode endpoint",commands)
-        self.assertIn("EDR/SIEM telemetry is external",commands)
+        self.assertIn(str(op.CLI)+" verify RUN_FOLDER",commands)
         for name in ("preparation.json","setup-result.json"):
             self.assertEqual(json.loads((workspace/name).read_text())["evidence_profile"],"endpoint")
         owned=json.loads((workspace/"ownership.json").read_text())["files"]
         self.assertNotIn(str(existing),[e["path"] for e in owned])
         self.assertEqual(existing.read_text(),"preserve")
         self.assertEqual(list((workspace/"evidence").iterdir()),[])
-        # Sequential tests reuse the prepared workspace and unique receipt names.
-        self.assertIn("NEW evidence filenames",commands)
-        with contextlib.redirect_stdout(io.StringIO()):
+        with patch("builtins.input",return_value="n"),contextlib.redirect_stdout(io.StringIO()):
             op.cleanup(argparse.Namespace(workspace=str(workspace),apply=False))
         self.assertTrue((workspace/".env").exists())
 
