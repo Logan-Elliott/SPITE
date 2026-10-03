@@ -39,7 +39,8 @@ installed product/version before scoring a test.
 
 This tool tests prerequisite execution, credential-file reads, Base64
 staging, an optional localhost POST or transfer to an operator-provided
-receiver, and response manipulation. Its default setup reads synthetic files; the
+receiver, and an instruction hierarchy test for indirect prompt injection. Its
+default setup reads synthetic files; the
 optional real harvest reads only the exact existing files in the file list. It
 does not run
 infostealers, reverse shells, remote payloads, persistence, scanner evasion, or

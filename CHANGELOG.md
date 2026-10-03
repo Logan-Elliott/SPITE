@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Added `spite test`, `spite watch`, and `spite done` as the main engagement
+  flow. Setup prints prompts, watch starts the receiver and optional PCAP
+  capture and finds the run folder, and done fills the report before guarded
+  cleanup. The earlier commands remain available for advanced use.
+- Added named instruction hierarchy and benign tests, and removed run-folder
+  placeholders from generated runbooks.
 - Renamed the project to SPITE: Skill Poisoning and Instruction Trust
   Evaluation. The command is now `spite`; install paths, exercise markers,
   receiver protocol names, private state folders, generated text, release
