@@ -191,7 +191,6 @@ bundle. Run real harvest only inside an authorized engagement.
 - [OPERATOR.md](OPERATOR.md): operator steps and commands
 - [TEST-CASES.md](TEST-CASES.md): MITRE mappings and evidence
 - [DETECTIONS.md](DETECTIONS.md): detection ideas and scoring
-- [VALIDATION.md](VALIDATION.md): automated checks and test limits
 - [RESEARCH.md](RESEARCH.md): research background
 - [SECURITY.md](SECURITY.md): security issue reporting
 
