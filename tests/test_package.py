@@ -13,6 +13,24 @@ from test_operator import op
 
 
 class CombinedSetupTests(unittest.TestCase):
+    def test_main_help_shows_three_commands_and_keeps_advanced_aliases(self):
+        help_text = subprocess.run([str(op.CLI), "help"], cwd=op.ROOT,
+                                   text=True, capture_output=True, check=True).stdout
+        for name in ("test", "watch", "done", "doctor", "install", "update",
+                     "uninstall", "version", "help"):
+            self.assertIn("spite " + name, help_text)
+        for name in ("init", "receive", "verify", "capture", "clean"):
+            self.assertNotIn("spite " + name, help_text)
+            result = subprocess.run([str(op.CLI), name, "--help"], cwd=op.ROOT,
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        test_help = subprocess.run([str(op.CLI), "test", "--help"], cwd=op.ROOT,
+                                   text=True, capture_output=True, check=True).stdout
+        self.assertIn("hierarchy (indirect prompt injection)", test_help)
+        self.assertIn("benign (false-positive control)", test_help)
+        for hidden in ("--variant", "--mode", "--target", "--plan", "--apply"):
+            self.assertNotIn(hidden + " ", test_help)
+
     def test_standard_file_list_keeps_credential_shaped_host_paths(self):
         groups=json.loads((op.ROOT/"plans/macos-default.json").read_text())
         self.assertEqual(groups,{"representative":[

@@ -262,6 +262,17 @@ class ThreeCommandResultsTests(unittest.TestCase):
                 watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
                             SimpleNamespace(**vars(op)))
 
+    def test_watch_returns_fail_for_changed_bundle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, _, newest = self.prepared_run(Path(temporary).resolve())
+            (newest / "diagnostics.b64").write_bytes(b"changed")
+            watch = op.module_from(op.ROOT / "tools/watch_flow.py", "failed_watch_test")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
+                                            SimpleNamespace(**vars(op))), 1)
+            result = json.loads((workspace / "watch-results.jsonl").read_text().splitlines()[0])
+            self.assertEqual(result["status"], "FAIL")
+
     def test_done_fills_report_from_watch_results_and_uses_guarded_cleanup(self):
         with tempfile.TemporaryDirectory() as temporary:
             workspace, _, second = self.prepared_run(Path(temporary).resolve())
