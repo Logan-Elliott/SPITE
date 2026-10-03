@@ -251,11 +251,21 @@ def run(manifest, send_loopback=False, send_to=None):
         raise ValueError("Choose one transfer option: --send-loopback or --send-to")
     destination = str(send_to) if send_to else ("http://127.0.0.1:8765/spite" if send_loopback else None)
     parts = parse_destination(destination) if destination else None
-    document = json.loads(Path(manifest).read_text(encoding="utf-8"))
+    manifest_path = Path(manifest).expanduser().absolute()
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
     source = manifest_source(document)
     entries = validate_manifest(document)
     run_id = str(uuid.uuid4())
-    root = Path(tempfile.mkdtemp(prefix="spite-"))
+    if manifest_path.parent.name == "batches" and (manifest_path.parent.parent / "setup-result.json").is_file():
+        runs = manifest_path.parent.parent / "runs"
+        if runs.is_symlink():
+            raise ValueError("The exercise runs directory cannot be a symlink")
+        if runs.is_dir():
+            root = Path(tempfile.mkdtemp(prefix="spite-", dir=runs))
+        else:
+            root = Path(tempfile.mkdtemp(prefix="spite-"))
+    else:
+        root = Path(tempfile.mkdtemp(prefix="spite-"))
     events = root / "events.jsonl"
 
     def emit(event, **details):

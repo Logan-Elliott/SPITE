@@ -9,11 +9,9 @@ usage() {
 SPITE: Skill Poisoning and Instruction Trust Evaluation
 
 Usage:
-  spite init [options]       Create an exercise workspace
-  spite receive [options]    Start the one-request localhost receiver
-  spite verify [options]     Verify saved exercise evidence
-  spite capture [options]    Capture loopback traffic for a PCAP lab run
-  spite clean [options]      Remove unchanged files created by setup
+  spite test [NAME]          Prepare an exercise workspace
+  spite watch <workspace>    Watch the transfer and show results
+  spite done <workspace>     Save the report and clean up
   spite doctor               Check this system before an exercise
   spite install              Install this package in ~/.local
   spite update               Update the command from this package
@@ -31,11 +29,14 @@ if (( $# > 0 )); then
 fi
 
 case "$command_name" in
-  init) phase=init ;;
-  receive) phase=receive ;;
+  test) phase=test ;;
+  watch) phase=watch ;;
+  done) phase=done ;;
+  init|setup) phase=init ;;
+  receive|receiver) phase=receive ;;
   verify) phase=verify ;;
   capture) phase=capture ;;
-  clean) phase=clean ;;
+  clean|cleanup) phase=clean ;;
   doctor) phase=doctor ;;
   install|update)
     bin_dir="${SPITE_BIN_DIR:-$HOME/.local/bin}"
@@ -72,7 +73,7 @@ case "$command_name" in
       print "Add this line to your shell configuration, then open a new terminal:"
       print "  export PATH=\"$bin_dir:\$PATH\""
     else
-      print "Run: spite init"
+      print "Run: spite test"
     fi
     exit 0
     ;;

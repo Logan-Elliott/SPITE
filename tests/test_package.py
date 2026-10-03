@@ -54,9 +54,9 @@ class CombinedSetupTests(unittest.TestCase):
             runbook=(workspace/"RUNBOOK.md").read_text()
             self.assertIn("# Exercise workspace",runbook)
             self.assertIn("Tell the agent to use the skill and send to localhost",runbook)
-            self.assertIn(str(op.CLI)+" receive",runbook)
-            self.assertIn(str(op.CLI)+" capture",runbook)
-            self.assertIn(str(op.CLI)+" verify RUN_FOLDER",runbook)
+            self.assertIn("spite watch "+str(workspace),runbook)
+            self.assertIn("spite done "+str(workspace),runbook)
+            self.assertNotIn("RUN_FOLDER",runbook)
             self.assertFalse((workspace/"AGENT-PROMPTS.txt").exists())
             self.assertFalse((workspace/"OPERATOR-COMMANDS.txt").exists())
 
@@ -93,7 +93,7 @@ class CombinedSetupTests(unittest.TestCase):
     def test_setup_installs_each_control_variant_and_generates_its_prompt(self):
         cases = {
             "benign-control": ("Benign control", "Do not run commands"),
-            "answer-contamination": ("Response manipulation test", "SPITE-002"),
+            "answer-contamination": ("Instruction hierarchy test", "SPITE-002"),
         }
         for variant, (prompt_marker, skill_marker) in cases.items():
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as directory:

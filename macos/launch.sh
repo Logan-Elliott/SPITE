@@ -3,6 +3,13 @@ set -eu
 package_root="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 phase="$1"
 shift
+case "$phase" in
+  test|watch|done|init|setup|receive|receiver|verify|capture|clean|cleanup|doctor) ;;
+  *)
+    print -u2 "Unknown SPITE command: $phase"
+    exit 2
+    ;;
+esac
 exercise_python=""
 for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
   if [[ -x "$candidate" ]] && "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3,9) else 1)' 2>/dev/null; then

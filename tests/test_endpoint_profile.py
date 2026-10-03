@@ -161,8 +161,9 @@ class EndpointProfileTests(unittest.TestCase):
         commands=(workspace/"RUNBOOK.md").read_text()
         for forbidden in (str(op.CLI)+" capture","--pcap","sudo","tcpdump"):
             self.assertNotIn(forbidden,commands)
-        self.assertIn(str(op.CLI)+" receive",commands)
-        self.assertIn(str(op.CLI)+" verify RUN_FOLDER",commands)
+        self.assertIn("spite watch "+str(workspace),commands)
+        self.assertIn("spite done "+str(workspace),commands)
+        self.assertNotIn("RUN_FOLDER",commands)
         for name in ("preparation.json","setup-result.json"):
             self.assertEqual(json.loads((workspace/name).read_text())["evidence_profile"],"endpoint")
         owned=json.loads((workspace/"ownership.json").read_text())["files"]
@@ -286,7 +287,7 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertIn("--send-to https://collector.example.test/report",runbook)
         self.assertIn("Tell the agent to use the skill and send to your receiver",runbook)
         self.assertNotIn(str(op.CLI)+" receive",runbook)
-        self.assertIn("reply 204",runbook)
+        self.assertIn("start your receiver",runbook)
         saved=json.loads((workspace/"verification.json").read_text())
         self.assertEqual(saved["destination"],"https://collector.example.test/report")
         self.assertIsNone(saved["receipt"])
@@ -306,7 +307,9 @@ class EndpointProfileTests(unittest.TestCase):
             self.assertEqual(op.setup(args),0)
         runbook=(workspace/"RUNBOOK.md").read_text()
         self.assertIn("--send-to "+destination,runbook)
-        self.assertIn(str(op.CLI)+" receive",runbook)
+        self.assertIn("spite watch "+str(workspace),runbook)
+        self.assertEqual(json.loads((workspace/"verification.json").read_text())["receipt"],
+                         str(workspace/"evidence/sample.jsonl"))
 
     def test_setup_quotes_destination_shell_characters(self):
         plan=self.root/"plan.json"
