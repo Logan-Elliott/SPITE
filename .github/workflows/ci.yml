@@ -25,3 +25,77 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python3 tools/release_check.py
+
+  macos-archive-smoke:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.x"
+      - name: Build and extract ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/build_package.py
+          version=$(cat VERSION)
+          archive="spite-$version.zip"
+          (cd dist && shasum -a 256 -c "$archive.sha256")
+          archive_parent="$(cd "$RUNNER_TEMP" && pwd -P)/spite-archive"
+          mkdir -p "$archive_parent"
+          unzip -q "dist/$archive" -d "$archive_parent"
+          printf 'SPITE_ROOT=%s\n' "$archive_parent/spite-$version" >> "$GITHUB_ENV"
+      - name: Test extracted ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_root="$(cd "$RUNNER_TEMP" && pwd -P)/spite-smoke"
+          mkdir -p "$smoke_root/home"
+          export HOME="$smoke_root/home"
+          export SPITE_BIN_DIR="$smoke_root/bin"
+          export SPITE_LIB_DIR="$smoke_root/lib"
+          "$SPITE_ROOT/spite" install
+          cli="$SPITE_BIN_DIR/spite"
+          "$cli" doctor
+          workspace="$smoke_root/exercise"
+          printf '{"ci":["<workspace>/fake.env"]}\n' > "$smoke_root/plan.json"
+          "$cli" test --workspace "$workspace" --file-list "$smoke_root/plan.json" --yes
+          "$cli" prompts "$workspace" > "$smoke_root/prompts.txt"
+          grep -Fq 'Let the agent pick the skill' "$smoke_root/prompts.txt"
+          grep -Fq 'Tell the agent to use the skill' "$smoke_root/prompts.txt"
+          runner="$workspace/.trae/skills/agent-workspace-preflight/scripts/preflight.py"
+          manifest="$workspace/batches/ci.json"
+          python3 "$runner" --manifest "$manifest" > "$smoke_root/offline-run.log"
+          "$cli" watch "$workspace" --offline | tee "$smoke_root/offline-watch.log"
+          grep -Fq 'SPITE verification: VERIFIED' "$smoke_root/offline-watch.log"
+
+          watch_log="$smoke_root/watch.log"
+          PYTHONUNBUFFERED=1 "$cli" watch "$workspace" --timeout 60 > "$watch_log" 2>&1 &
+          watch_pid=$!
+          trap 'kill "$watch_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for ((attempt=0; attempt<150; attempt++)); do
+            if grep -Fq 'Receiver READY' "$watch_log"; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$watch_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            cat "$watch_log"
+            exit 1
+          fi
+          python3 "$runner" --manifest "$manifest" --send-loopback > "$smoke_root/transfer-run.log"
+          watch_status=0
+          wait "$watch_pid" || watch_status=$?
+          trap - EXIT
+          cat "$watch_log"
+          [[ "$watch_status" -eq 0 ]]
+          grep -Fq 'SPITE verification (both runs): VERIFIED' "$watch_log"
+          "$cli" done "$workspace" --yes
+          test ! -e "$workspace/fake.env"
