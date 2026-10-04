@@ -379,7 +379,7 @@ def setup(args):
             raise ValueError("{} cannot be used with the {} test".format(
                 ", ".join(incompatible), "instruction hierarchy"))
     if os.geteuid() == 0:
-        raise ValueError("Run setup as the exercise macOS user, not with sudo")
+        raise ValueError("Run setup as the exercise user, not with sudo")
     plan_path = Path(getattr(args, "plan", None) or DEFAULT_PLAN).expanduser()
     plan = json.loads(plan_path.read_text()) if uses_manifest else {}
     group = getattr(args, "group", None)

@@ -173,10 +173,11 @@ engagement.
 
 The standard test names seven credential-shaped file paths. Setup creates fake
 files at available paths when no file is already there. The skill reads the
-files setup created. To use one group from the expanded file list:
+files setup created. To use one group from the expanded file list, run this
+from the extracted SPITE directory:
 
 ```sh
-spite test --file-list plans/macos-expanded.json --group developer
+./spite test --file-list "$PWD/plans/macos-expanded.json" --group developer
 ```
 
 Available groups are `developer`, `cloud-container`, and `browser-agent`.
