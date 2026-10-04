@@ -3,11 +3,29 @@
 from pathlib import Path
 import hashlib
 import json
+import os
 import re
+import subprocess
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 SLUG="spite"
+
+
+def validate_package_inputs(root,files):
+    for path in files:
+        if path.is_symlink():
+            raise ValueError("Package input is a symlink: "+str(path.relative_to(root)))
+    if not (root/".git").exists():
+        return
+    result=subprocess.run(["git","-C",str(root),"ls-files","--cached","-z"],
+                          check=True,stdout=subprocess.PIPE)
+    tracked=set(result.stdout.split(b"\0"))
+    for path in files:
+        relative=path.relative_to(root)
+        if os.fsencode(str(relative)) not in tracked:
+            raise ValueError("Package input is not tracked by Git: {}. Remove or track it before building.".format(relative))
+
 
 if __name__=="__main__":
     version=(ROOT/"VERSION").read_text(encoding="utf-8").strip()
@@ -19,10 +37,11 @@ if __name__=="__main__":
     target=output/(package_root+".zip")
     files=[]
     for folder in ("macos","tools","skills","variants","profiles","plans","tests"):
-        files.extend(p for p in (ROOT/folder).rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix!=".pyc")
+        files.extend(p for p in (ROOT/folder).rglob("*") if (p.is_file() or p.is_symlink()) and "__pycache__" not in p.parts and p.suffix!=".pyc")
     files.extend(ROOT/name for name in (
         "README.md","TEST-CASES.md","DETECTIONS.md",
         "CONTRIBUTING.md","LICENSE","VERSION","spite"))
+    validate_package_inputs(ROOT,files)
     hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
     with zipfile.ZipFile(target,"w",compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(files):

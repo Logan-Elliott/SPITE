@@ -9,7 +9,39 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from tools import build_package as package
 from test_operator import op
+
+
+class PackageInputTests(unittest.TestCase):
+    def test_source_archive_and_git_checkout_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            tests=root/"tests"
+            tests.mkdir()
+            tracked=tests/"tracked.txt"
+            tracked.write_text("tracked")
+            package.validate_package_inputs(root,[tracked])
+
+            subprocess.run(["git","init","-q",str(root)],check=True)
+            subprocess.run(["git","-C",str(root),"add","tests/tracked.txt"],check=True)
+            package.validate_package_inputs(root,[tracked])
+
+            untracked=tests/"untracked.txt"
+            untracked.write_text("extra")
+            with self.assertRaisesRegex(ValueError,"not tracked by Git: tests/untracked.txt"):
+                package.validate_package_inputs(root,[tracked,untracked])
+
+            (root/".gitignore").write_text(".DS_Store\n")
+            ignored=tests/".DS_Store"
+            ignored.write_text("extra")
+            with self.assertRaisesRegex(ValueError,"not tracked by Git: tests/.DS_Store"):
+                package.validate_package_inputs(root,[tracked,ignored])
+
+            link=tests/"link.txt"
+            link.symlink_to(tracked)
+            with self.assertRaisesRegex(ValueError,"symlink: tests/link.txt"):
+                package.validate_package_inputs(root,[tracked,link])
 
 
 class CombinedSetupTests(unittest.TestCase):
