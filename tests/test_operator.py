@@ -225,7 +225,7 @@ class ThreeCommandResultsTests(unittest.TestCase):
         second = max((workspace / "runs").iterdir(), key=lambda path: path.stat().st_mtime_ns)
         return workspace, first, second
 
-    def test_watch_offline_finds_newest_run_and_prints_scoring_states(self):
+    def test_watch_offline_finds_newest_run_and_shows_verification(self):
         with tempfile.TemporaryDirectory() as temporary:
             workspace, first, second = self.prepared_run(Path(temporary).resolve())
             watch = op.module_from(op.ROOT / "tools/watch_flow.py", "watch_test")
@@ -235,9 +235,10 @@ class ThreeCommandResultsTests(unittest.TestCase):
                 self.assertEqual(watch.watch(request, SimpleNamespace(**vars(op))), 0)
             self.assertNotEqual(first, second)
             self.assertIn("Run folder: " + str(second), output.getvalue())
-            self.assertIn("TC-01", output.getvalue())
-            self.assertIn("unknown", output.getvalue())
-            self.assertIn("not-run", output.getvalue())
+            self.assertIn("SPITE verification: VERIFIED", output.getvalue())
+            self.assertNotIn("TC-01", output.getvalue())
+            self.assertNotIn("Sensor outcome", output.getvalue())
+            self.assertNotIn("EDR/SIEM", output.getvalue())
             self.assertIn("Next: spite done " + str(workspace), output.getvalue())
             reports = [json.loads(path.read_text()) for path in (workspace / "evidence").glob("*watch*.json")]
             self.assertEqual(len(reports), 1)
@@ -316,26 +317,29 @@ class ThreeCommandResultsTests(unittest.TestCase):
                 self.assertEqual(len(reports), 1 if scenario is None else 2)
                 if offline_run is not None:
                     self.assertIn(str(offline_run), output.getvalue())
-                displayed = [line.removeprefix("Result: ") for line in output.getvalue().splitlines()
-                             if line.startswith("Result: ")]
+                displayed = [line.removeprefix("SPITE verification: ") for line in output.getvalue().splitlines()
+                             if line.startswith("SPITE verification: ")]
                 self.assertEqual(displayed, (["FAIL" if scenario in ("changed", "incomplete")
                                               else "VERIFIED"] if offline_run is not None else []) + ["VERIFIED"])
+                self.assertNotIn("TC-01", output.getvalue())
+                self.assertNotIn("Sensor outcome", output.getvalue())
+                self.assertNotIn("EDR/SIEM", output.getvalue())
                 self.assertTrue(any(report["status"] == "VERIFIED" for report in reports))
                 self.assertFalse((workspace / "watch-results.jsonl").exists())
                 self.assertIn("Next: spite done " + str(workspace), output.getvalue())
 
     def test_watch_translates_failed_checks_without_internal_keys(self):
-        watch = op.module_from(op.ROOT / "tools/watch_flow.py", "watch_scoring_test")
-        report = {"status": "FAIL", "test_cases": {"TC-03": "artifacts-verified"},
-                  "checks": {"all_file_hashes_match": False}}
-        outcomes = watch.score_test_cases(report)
+        watch = op.module_from(op.ROOT / "tools/watch_flow.py", "watch_verification_test")
+        report = {"status": "FAIL", "checks": {"all_file_hashes_match": False}}
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            watch._print_results(report, outcomes)
-        self.assertEqual(outcomes["TC-03"], "unknown")
+            watch._print_verification(report)
+        self.assertIn("SPITE verification: FAIL", output.getvalue())
         self.assertIn("At least one staged file hash differed", output.getvalue())
         self.assertNotIn("all_file_hashes_match", output.getvalue())
-        self.assertEqual(watch.score_test_cases(report, offline=True)["TC-05"], "not-run")
+        self.assertNotIn("TC-03", output.getvalue())
+        self.assertNotIn("Sensor outcome", output.getvalue())
+        self.assertNotIn("EDR/SIEM", output.getvalue())
 
     def test_watch_rejects_saved_paths_outside_workspace(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -362,7 +366,7 @@ class ThreeCommandResultsTests(unittest.TestCase):
             reports = [json.loads(path.read_text()) for path in (workspace / "evidence").glob("*watch*.json")]
             self.assertEqual(len(reports), 1)
             self.assertEqual(reports[0]["status"], "FAIL")
-            self.assertIn("Result: FAIL", output.getvalue())
+            self.assertIn("SPITE verification: FAIL", output.getvalue())
             self.assertFalse((workspace / "watch-results.jsonl").exists())
 
     def test_done_cleans_without_report_or_watch_results(self):

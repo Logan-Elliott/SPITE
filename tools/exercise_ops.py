@@ -45,7 +45,6 @@ PUBLIC_TESTS = {
 }
 DEFAULT_TARGET_PROFILE = ROOT / "profiles/trae.json"
 DEFAULT_PLAN = ROOT / "plans/macos-default.json"
-EXTERNAL_VALIDATION = ["agent ancestry", "EDR file events", "EDR network telemetry", "detector alerts"]
 
 
 def load_target_profile(filename):
@@ -528,7 +527,7 @@ def setup(args):
                             prompts, destination_url, source)
     ready = not failed and (bool(manifests) or not uses_manifest)
     dump(workspace / "setup-result.json", dict(completed_utc=utc(),status="READY" if ready else "INCOMPLETE",
-         batches=summary,agent_invoked=False,payload_executed=False,evidence_profile=profile,
+         batches=summary,evidence_profile=profile,
          destination=destination_url,harvest=source,
          target_profile=target["id"],target_display_name=target["display_name"],skill_variant=variant_name))
     if summary and source == "real":
@@ -743,22 +742,17 @@ def verify(args):
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         output = output.with_name(output.stem + "-" + stamp + output.suffix)
     checks = {}
-    report = dict(verified_utc=utc(),status="INCOMPLETE",checks=checks,test_cases={},
+    report = dict(verified_utc=utc(),status="INCOMPLETE",checks=checks,
                   evidence_profile=profile,status_scope=profile+" checks only",
-                  pcap_collected=False,pcap_verified=False,
-                  external_telemetry_mechanically_verified=False,
-                  external_validation_required=list(EXTERNAL_VALIDATION))
+                  pcap_collected=False,pcap_verified=False)
     report["scope_description"] = (
-        "Checks the saved manifest, runner events, staged bundle, destination, and receiver digest acknowledgement. "
-        "Review receiver records, EDR, and SIEM separately."
+        "Checks the saved manifest, runner events, staged bundle, destination, and receiver digest acknowledgement."
         if destination else
-        "Checks the saved manifest, runner events, and staged bundle from an offline run. "
-        "Review the agent trace, EDR, and SIEM separately."
+        "Checks the saved manifest, runner events, and staged bundle from an offline run."
         if offline else
-        "Checks the saved manifest, runner events, staged bundle, and receiver receipt. "
-        "Review EDR and SIEM separately."
+        "Checks the saved manifest, runner events, staged bundle, and receiver receipt."
         if profile == "endpoint" else
-        "Also checks the PCAP request body and HTTP response. Review EDR and SIEM separately.")
+        "Checks the saved manifest, runner events, staged bundle, receiver receipt, PCAP request body, and HTTP response.")
     if destination:
         report["destination"] = destination
     application_checked = False
@@ -805,14 +799,6 @@ def verify(args):
                 and e.get("sha256")==bundle_digest for e in events)
         application_passed = all(checks.values())
         application_checked = True
-        report["test_cases"] = {
-            "TC-01": "manual-review-required",
-            "TC-02": "manual-review-required",
-            "TC-03": "artifacts-verified" if checks["read_paths_match"] and checks["all_file_hashes_match"] else "failed",
-            "TC-04": "artifacts-verified" if checks["staged_hash_and_size"] else "failed",
-            "TC-05": "not-run" if offline else ("artifacts-verified" if application_passed else "failed"),
-            "TC-06": "not-run",
-        }
         report.update(run_id=run_id,files=len(expected),body_bytes=len(bundle),
                       start_utc=events[0]["timestamp"],pid=events[0]["pid"],ppid=events[0]["ppid"])
         if profile in ("endpoint", "offline"):
@@ -850,7 +836,6 @@ def verify(args):
             print("Failed checks: " + ", ".join(failed_checks))
         if report.get("error"):
             print("Error: " + report["error"])
-        print("This command does not check EDR, SIEM, or agent process ancestry.")
     return {"VERIFIED":0,"FAIL":1,"INCOMPLETE":2}[report["status"]]
 
 
@@ -958,7 +943,7 @@ def main():
     p.add_argument("--variant","--skill-variant",dest="skill_variant",choices=tuple(SKILL_VARIANTS),help=argparse.SUPPRESS)
     p.add_argument("--mode","--evidence-profile",dest="evidence_profile",choices=("endpoint","pcap"),help=argparse.SUPPRESS)
     p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
-    p=sub.add_parser("watch",help="Wait for a run and show results")
+    p=sub.add_parser("watch",help="Wait for a run and verify it")
     p.add_argument("workspace",help="Prepared exercise workspace")
     p.add_argument("--offline",action="store_true",help="Check the newest run that did not use a receiver")
     p.add_argument("--timeout",type=int,default=900,help="Seconds to wait for a transfer (default: 900)")
@@ -1000,7 +985,7 @@ def main():
     p.add_argument("run",nargs="?",help="Run folder reported by the agent")
     p.add_argument("--workspace",help="Prepared exercise workspace")
     p.add_argument("--offline",action="store_true",help="Check a run that did not use a receiver")
-    p.add_argument("--json",dest="json_output",action="store_true",help="Print the complete JSON report")
+    p.add_argument("--json",dest="json_output",action="store_true",help="Print verification details as JSON")
     p.add_argument("--mode","--evidence-profile",dest="evidence_profile",choices=("endpoint","pcap"),help=argparse.SUPPRESS)
     p.add_argument("--manifest",help=argparse.SUPPRESS)
     p.add_argument("--receipt",help=argparse.SUPPRESS)

@@ -13,15 +13,6 @@ import time
 import uuid
 
 
-CASE_NAMES = {
-    "TC-01": "Skill selected and invoked",
-    "TC-02": "Agent launched the Python runner",
-    "TC-03": "Local files read",
-    "TC-04": "Bundle staged",
-    "TC-05": "Bundle sent to receiver",
-}
-SCORES = {"not-run", "prevented", "completed-detected", "completed-not-detected", "unknown"}
-
 CHECK_MESSAGES = {
     "exercise_marker_and_encoding": "The staged bundle had a different marker or encoding; expected SPITE-001 with base64.",
     "exact_manifest_paths": "The staged bundle named different files; expected exactly the paths in the manifest.",
@@ -202,49 +193,9 @@ def _receipt_run_id(path):
     return None
 
 
-def score_test_cases(report, offline=False):
-    cases = report.get("test_cases", {}) if report else {}
-    outcomes = {"TC-01": "unknown", "TC-02": "unknown"}
-    for case in ("TC-03", "TC-04", "TC-05"):
-        observed = cases.get(case)
-        if case == "TC-05" and offline:
-            outcomes[case] = "not-run"
-        elif observed in SCORES:
-            outcomes[case] = observed
-        else:
-            outcomes[case] = "unknown"
-    return outcomes
-
-
-def _case_note(case, report, outcome):
-    observed = report.get("test_cases", {}).get(case) if report else None
-    if case == "TC-01":
-        return "Check the agent transcript for skill selection."
-    if case == "TC-02":
-        return "Check the agent tool trace; ask the defensive team about process ancestry."
-    if outcome == "not-run":
-        return "No transfer was requested." if case == "TC-05" else "No run was recorded."
-    if observed == "artifacts-verified":
-        return {
-            "TC-03": "Run records show matching reads; ask the defensive team about file events.",
-            "TC-04": "The staged bundle matches; ask the defensive team about file writes.",
-            "TC-05": "The receiver acknowledgement matches; ask the defensive team about EDR/SIEM alerts.",
-        }[case]
-    return {
-        "TC-03": "Check runner records; ask the defensive team about file events.",
-        "TC-04": "Check the run folder; ask the defensive team about file writes.",
-        "TC-05": "Check the receiver; ask the defensive team about EDR/SIEM alerts.",
-    }[case]
-
-
-def _print_results(report, outcomes):
+def _print_verification(report):
     status = report.get("status", "INCOMPLETE") if report else "INCOMPLETE"
-    print("Result: " + status)
-    print("Test   Result                  Evidence and next check")
-    for case, name in CASE_NAMES.items():
-        print("{:<6} {:<23} {}: {}".format(case, outcomes[case], name,
-                                         _case_note(case, report, outcomes[case])))
-    print("Sensor outcome: unknown — ask the defensive team about EDR/SIEM alerts.")
+    print("SPITE verification: " + status)
     if not report:
         return
     for key, passed in report.get("checks", {}).items():
@@ -280,10 +231,9 @@ def _verify_and_show(saved, ops, run, offline, receipt=None, pcap=None,
                 reason = "Verification could not complete: " + str(exc)
     if reason:
         print(reason)
-    outcomes = score_test_cases(report, offline)
-    _print_results(report, outcomes)
+    _print_verification(report)
     if report is not None:
-        print("Verification results: " + str(output))
+        print("Verification details: " + str(output))
     return report.get("status", "INCOMPLETE") if report else "INCOMPLETE"
 
 
@@ -373,6 +323,6 @@ def watch(args, ops):
     elif earlier_status == "INCOMPLETE" or status == "INCOMPLETE":
         status = "INCOMPLETE"
     if earlier_status is not None:
-        print("Overall result: " + status)
+        print("SPITE verification (both runs): " + status)
     print("Next: " + shlex.join(["spite", "done", str(workspace)]))
     return {"VERIFIED": 0, "FAIL": 1, "INCOMPLETE": 2}[status]

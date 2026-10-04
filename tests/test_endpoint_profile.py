@@ -76,11 +76,25 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertEqual(report["status_scope"],"endpoint checks only")
         self.assertFalse(report["pcap_collected"])
         self.assertFalse(report["pcap_verified"])
-        self.assertFalse(report["external_telemetry_mechanically_verified"])
-        self.assertEqual(report["external_validation_required"],op.EXTERNAL_VALIDATION)
+        for field in ("test_cases","external_telemetry_mechanically_verified",
+                      "external_validation_required"):
+            self.assertNotIn(field,report)
+        self.assertTrue(report["checks"]["receipt_matches_bundle"])
+        self.assertNotIn("EDR",report["scope_description"])
+        self.assertNotIn("SIEM",report["scope_description"])
         self.assertNotIn("pcap_sha256",report)
         self.assertFalse(any(key.startswith("pcap_") for key in report["checks"]))
         self.assertFalse((self.root / "pre-seeded-mock").exists())
+
+    def test_verify_output_stays_on_operational_checks(self):
+        args, _ = self.artifacts()
+        output=io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(op.verify(args),0)
+        self.assertIn("ARTIFACTS VERIFIED",output.getvalue())
+        self.assertNotIn("EDR",output.getvalue())
+        self.assertNotIn("SIEM",output.getvalue())
+        self.assertNotIn("process ancestry",output.getvalue())
 
     def test_endpoint_missing_application_evidence_fails(self):
         args, _ = self.artifacts()
@@ -166,6 +180,9 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertNotIn("RUN_FOLDER",commands)
         for name in ("preparation.json","setup-result.json"):
             self.assertEqual(json.loads((workspace/name).read_text())["evidence_profile"],"endpoint")
+        setup_result=json.loads((workspace/"setup-result.json").read_text())
+        self.assertNotIn("agent_invoked",setup_result)
+        self.assertNotIn("payload_executed",setup_result)
         owned=json.loads((workspace/"ownership.json").read_text())["files"]
         self.assertNotIn(str(existing),[e["path"] for e in owned])
         self.assertEqual(existing.read_text(),"preserve")
@@ -204,7 +221,7 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertNotIn("completed_loopback",report["checks"])
         self.assertIn("receiver digest acknowledgement",report["scope_description"])
 
-    def test_offline_run_verifies_tc03_and_tc04_without_a_receipt(self):
+    def test_offline_run_checks_bundle_without_a_receipt(self):
         args,_=self.artifacts()
         log=Path(args.run)/"events.jsonl"
         events=[json.loads(line) for line in log.read_text().splitlines()]
@@ -216,9 +233,12 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertEqual(status,0)
         self.assertEqual(report["status"],"VERIFIED")
         self.assertEqual(report["evidence_profile"],"offline")
-        self.assertEqual(report["test_cases"]["TC-03"],"artifacts-verified")
-        self.assertEqual(report["test_cases"]["TC-04"],"artifacts-verified")
-        self.assertEqual(report["test_cases"]["TC-05"],"not-run")
+        self.assertTrue(report["checks"]["read_paths_match"])
+        self.assertTrue(report["checks"]["all_file_hashes_match"])
+        self.assertTrue(report["checks"]["staged_hash_and_size"])
+        self.assertTrue(report["checks"]["completed_offline"])
+        self.assertNotIn("receipt_matches_bundle",report["checks"])
+        self.assertNotIn("test_cases",report)
 
     def test_local_destination_still_requires_the_bundled_receiver_receipt(self):
         destination="http://127.0.0.1:8765/spite"
