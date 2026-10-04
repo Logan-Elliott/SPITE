@@ -52,7 +52,7 @@ def newest_run(workspace, mode=None, run_id=None, destination=None, terminal=Fal
     for run in root.iterdir():
         if run.name in exclude_names or run.is_symlink() or not run.is_dir():
             continue
-        events = _read_events(run)
+        events = [event for event in _read_events(run) if isinstance(event, dict)]
         if not events:
             continue
         if run_id and not any(event.get("run_id") == run_id for event in events):
@@ -186,7 +186,7 @@ def _receipt_run_id(path):
         with Path(path).open(encoding="utf-8") as stream:
             for line in stream:
                 record = json.loads(line)
-                if record.get("event") == "collector_received":
+                if isinstance(record, dict) and record.get("event") == "collector_received":
                     return record.get("run_id")
     except (OSError, ValueError):
         pass
@@ -272,11 +272,9 @@ def watch(args, ops):
             print("")
     try:
         if offline:
-            run = newest_run(workspace, mode="offline")
+            run = newest_run(workspace, terminal=True, no_receiver=True)
             if run is None:
-                run = newest_run(workspace, terminal=True)
-            if run is None:
-                reason = "No completed run was found. Ask the agent to run the skill once without a receiver."
+                reason = "No finished run without a receiver was found. Ask the agent to run the skill once without a receiver."
         elif destination:
             existing_runs = _existing_run_names(workspace)
             print("Your receiver must be listening at {}.".format(destination))

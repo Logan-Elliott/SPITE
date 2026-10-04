@@ -334,6 +334,57 @@ class ThreeCommandResultsTests(unittest.TestCase):
             self.assertEqual(reports[0]["run_id"], json.loads((second / "events.jsonl").read_text().splitlines()[0])["run_id"])
             self.assertFalse((workspace / "watch-results.jsonl").exists())
 
+    def test_watch_offline_uses_newest_no_receiver_run_even_if_incomplete(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, first, second = self.prepared_run(Path(temporary).resolve())
+            events_path = second / "events.jsonl"
+            events = [json.loads(line) for line in events_path.read_text().splitlines()]
+            events[-1]["event"] = "execution_incomplete"
+            events[-1].pop("mode")
+            events_path.write_text("\n".join(json.dumps(event) for event in events) + "\n")
+            (second / "diagnostics.b64").unlink()
+            watch = op.module_from(op.ROOT / "tools/watch_flow.py", "incomplete_offline_watch_test")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
+                                            SimpleNamespace(**vars(op))), 1)
+            self.assertIn("Run folder: " + str(second), output.getvalue())
+            self.assertNotIn("Run folder: " + str(first), output.getvalue())
+            self.assertIn("SPITE verification: FAIL", output.getvalue())
+
+    def test_watch_offline_skips_newer_receiver_run(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, first, second = self.prepared_run(Path(temporary).resolve())
+            events_path = second / "events.jsonl"
+            events = [json.loads(line) for line in events_path.read_text().splitlines()]
+            events.insert(-1, dict(events[-1], event="transfer_attempt",
+                                   destination="http://127.0.0.1:8765/spite"))
+            events[-1]["mode"] = "loopback"
+            events_path.write_text("\n".join(json.dumps(event) for event in events) + "\n")
+            watch = op.module_from(op.ROOT / "tools/watch_flow.py", "receiver_offline_watch_test")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
+                                            SimpleNamespace(**vars(op))), 0)
+            self.assertIn("Run folder: " + str(first), output.getvalue())
+            self.assertNotIn("Run folder: " + str(second), output.getvalue())
+
+    def test_watch_reports_non_object_events_without_crashing(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, _, second = self.prepared_run(Path(temporary).resolve())
+            events_path = second / "events.jsonl"
+            events_path.write_text('null\n[]\n"record"\n3\n' + events_path.read_text())
+            watch = op.module_from(op.ROOT / "tools/watch_flow.py", "malformed_event_watch_test")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
+                                            SimpleNamespace(**vars(op))), 1)
+            self.assertIn("Run folder: " + str(second), output.getvalue())
+            self.assertIn("SPITE verification: FAIL", output.getvalue())
+            reports = [json.loads(path.read_text()) for path in (workspace / "evidence").glob("*watch*.json")]
+            self.assertEqual(len(reports), 1)
+            self.assertEqual(reports[0]["status"], "FAIL")
+
     def test_normal_watch_checks_prior_offline_run_and_transfer(self):
         for scenario in (None, "verified", "changed", "incomplete"):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
