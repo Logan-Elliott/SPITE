@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import struct
 import sys
 import tempfile
@@ -166,13 +167,18 @@ class ThreeCommandSetupTests(unittest.TestCase):
             self.assertLess(output.getvalue().index("Step 1 —"), output.getvalue().index("Step 2 —"))
             self.assertLess(output.getvalue().index("Next command: spite watch "),
                             output.getvalue().index("Step 3 —"))
-            runbook = (workspace / "RUNBOOK.md").read_text()
-            self.assertNotIn("RUN_FOLDER", runbook)
-            self.assertIn("spite watch " + str(workspace), runbook)
-            self.assertIn("spite done " + str(workspace), runbook)
-            self.assertNotIn("spite watch --offline", runbook)
-            self.assertIn("### Step 2 — Tell the agent to use the skill (only if step 1 did not use the skill)", runbook)
-            self.assertLess(runbook.index("spite watch " + str(workspace)), runbook.index("### Step 3 —"))
+            self.assertFalse((workspace / "RUNBOOK.md").exists())
+            replay = io.StringIO()
+            with patch.object(sys, "argv", ["exercise_ops.py", "prompts", str(workspace)]), \
+                 contextlib.redirect_stdout(replay):
+                self.assertEqual(op.main(), 0)
+            prompt_blocks = r"```text\n(.*?)\n```"
+            self.assertEqual(re.findall(prompt_blocks, replay.getvalue(), re.S),
+                             re.findall(prompt_blocks, output.getvalue(), re.S))
+            self.assertEqual(len(re.findall(prompt_blocks, replay.getvalue(), re.S)), 3)
+            self.assertIn("Next command: spite watch " + str(workspace), replay.getvalue())
+            self.assertLess(replay.getvalue().index("Next command: spite watch "),
+                            replay.getvalue().index("Step 3 —"))
             runner = op.module_from(op.SKILL / "scripts/preflight.py", "workspace_runner")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(runner.run(workspace / "batches/sample.json"), 0)
@@ -200,6 +206,88 @@ class ThreeCommandSetupTests(unittest.TestCase):
                 else:
                     self.assertIn("no command or fake-file access", output.getvalue())
                     self.assertTrue((workspace / "batches/sample.json").is_file())
+                self.assertFalse((workspace / "RUNBOOK.md").exists())
+                replay = io.StringIO()
+                with patch.object(sys, "argv", ["exercise_ops.py", "prompts", str(workspace)]), \
+                     contextlib.redirect_stdout(replay):
+                    self.assertEqual(op.main(), 0)
+                prompt_blocks = r"```text\n(.*?)\n```"
+                self.assertEqual(re.findall(prompt_blocks, replay.getvalue(), re.S),
+                                 re.findall(prompt_blocks, output.getvalue(), re.S))
+                self.assertEqual(len(re.findall(prompt_blocks, replay.getvalue(), re.S)), 1)
+                self.assertIn("Expected:", replay.getvalue())
+                self.assertIn("Next command: spite done " + str(workspace), replay.getvalue())
+
+    def test_legacy_init_prints_prompts_without_a_runbook(self):
+        cases = (
+            (None, "main", "Step 1 — Let the agent pick the skill", "watch"),
+            ("normal", "main", "Step 1 — Let the agent pick the skill", "watch"),
+            ("response", "answer-contamination", "Expected: exactly READY", "done"),
+            ("benign", "benign-control", "Expected: a short readiness explanation", "done"),
+        )
+        for name, variant, marker, next_command in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                plan = root / "plan.json"
+                plan.write_text(json.dumps({"sample": ["<workspace>/fake.env"]}))
+                workspace = root / "workspace"
+                output = io.StringIO()
+                argv = ["exercise_ops.py", "init", "--workspace", str(workspace), "--yes"]
+                if name:
+                    argv.extend(["--test", name])
+                if name != "response":
+                    argv.extend(["--file-list", str(plan)])
+                with patch.object(sys, "argv", argv), patch.object(op.os, "geteuid", return_value=501), \
+                     contextlib.redirect_stdout(output):
+                    self.assertEqual(op.main(), 0)
+                self.assertEqual(json.loads((workspace / "setup-result.json").read_text())["skill_variant"], variant)
+                self.assertIn(marker, output.getvalue())
+                self.assertIn("```text", output.getvalue())
+                self.assertIn("Next command: spite " + next_command + " " + str(workspace), output.getvalue())
+                self.assertFalse((workspace / "RUNBOOK.md").exists())
+
+    def test_prompts_replay_saved_text_after_workspace_metadata_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            plan = root / "plan.json"
+            plan.write_text(json.dumps({"sample": ["<workspace>/fake.env"]}))
+            workspace = root / "workspace"
+            setup_output = io.StringIO()
+            argv = ["exercise_ops.py", "test", "--workspace", str(workspace),
+                    "--file-list", str(plan), "--yes"]
+            with patch.object(sys, "argv", argv), patch.object(op.os, "geteuid", return_value=501), \
+                 contextlib.redirect_stdout(setup_output):
+                self.assertEqual(op.main(), 0)
+            original = setup_output.getvalue()
+            saved_text = original[original.index("\nOpen this workspace in the target agent."):]
+            self.assertEqual(saved_text.count("```text"), 3)
+
+            result_path = workspace / "setup-result.json"
+            result = json.loads(result_path.read_text())
+            result.update(skill_variant="answer-contamination", batches={}, destination="https://changed.example.test")
+            result_path.write_text(json.dumps(result))
+            target_path = workspace / "target-profile.json"
+            target = json.loads(target_path.read_text())
+            target.update(display_name="Changed Agent", skill_name="changed-skill")
+            target_path.write_text(json.dumps(target))
+            preparation_path = workspace / "preparation.json"
+            preparation = json.loads(preparation_path.read_text())
+            preparation["interpreter"] = "/changed/python"
+            preparation_path.write_text(json.dumps(preparation))
+
+            replay = io.StringIO()
+            with patch.object(sys, "argv", ["exercise_ops.py", "prompts", str(workspace)]), \
+                 contextlib.redirect_stdout(replay):
+                self.assertEqual(op.main(), 0)
+            self.assertEqual(replay.getvalue(), saved_text)
+
+            state_id = json.loads((workspace / "ownership.json").read_text())["state_id"]
+            state_path = root / ".spite-state" / (state_id + ".json")
+            state = json.loads(state_path.read_text())
+            del state["operator_prompts"]
+            state_path.write_text(json.dumps(state))
+            with self.assertRaisesRegex(ValueError, "No saved prompts for this workspace"):
+                op.show_prompts(argparse.Namespace(workspace=str(workspace)))
 
     def test_verify_rejects_literal_run_folder_placeholders(self):
         for name in ("RUN_FOLDER", "OFFLINE_RUN_FOLDER"):

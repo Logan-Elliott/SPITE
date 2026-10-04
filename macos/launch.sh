@@ -4,7 +4,7 @@ package_root="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
 phase="$1"
 shift
 case "$phase" in
-  test|watch|done|init|setup|receive|receiver|verify|capture|clean|cleanup|doctor) ;;
+  test|prompts|watch|done|init|setup|receive|receiver|verify|capture|clean|cleanup|doctor) ;;
   *)
     print -u2 "Unknown SPITE command: $phase"
     exit 2

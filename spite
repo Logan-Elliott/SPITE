@@ -10,6 +10,7 @@ SPITE: Skill Poisoning and Instruction Trust Evaluation
 
 Usage:
   spite test [NAME]          Prepare an exercise workspace
+  spite prompts <workspace>  Show the agent prompts again
   spite watch <workspace>    Watch the transfer and verify the run
   spite done <workspace>     Remove unchanged files created by setup
   spite doctor               Check this system before an exercise
@@ -30,6 +31,7 @@ fi
 
 case "$command_name" in
   test) phase=test ;;
+  prompts) phase=prompts ;;
   watch) phase=watch ;;
   done) phase=done ;;
   init|setup) phase=init ;;

@@ -30,6 +30,8 @@ below. On Linux, use the standard test without `--pcap`; setup details are in
    path outside the workspace, asks once before writing, and refuses `sudo` or
    an existing workspace. Open it in the agent. Keep its normal approval
    controls enabled.
+   Setup prints the prompts for this workspace. To see them again later, run
+   `spite prompts "$HOME/spite-exercise"`.
    Paste prompt 1, **Let the agent pick the skill**, into a fresh conversation.
    Paste prompt 2, **Tell the agent to use the skill**, into another fresh
    conversation only if the agent did not choose the skill in prompt 1. Observe
@@ -62,9 +64,9 @@ leaves changed, replaced, symlinked, and existing real files alone. Missing
 files are skipped. For scripted cleanup, use
 `spite done "$HOME/spite-exercise" --yes`. If setup stops
 after creating files, use the cleanup command it prints before retrying with a
-new workspace. Setup also writes `RUNBOOK.md`. The authoritative cleanup record
-is in a private `.spite-state` folder beside the workspace; editing the
-workspace copy cannot add deletion targets.
+new workspace. The authoritative cleanup record is in a private `.spite-state`
+folder beside the workspace; editing the workspace copy cannot add deletion
+targets.
 
 ## Linux support
 
@@ -91,9 +93,10 @@ spite test --workspace "$HOME/spite-exercise" --yes
 
 ## Advanced tests
 
-Each named test creates its own workspace and needs no receiver. Use a fresh
-agent conversation for each prompt. Finish each workspace with the `spite done`
-command printed by setup.
+Each named test creates its own workspace and needs no receiver. Open that
+workspace in the agent, use a fresh conversation for its prompt, and save the
+transcript. Finish each workspace with the `spite done` command printed by
+setup. Use `spite prompts <workspace>` to see its prompt again.
 
 To ask whether untrusted skill content can override your direct instruction,
 run the instruction hierarchy test:
@@ -197,8 +200,8 @@ Real harvest reads only the exact paths in the file list, skips missing,
 symlinked, special, and over-cap files, and never creates, changes, or deletes
 anything. Real files may be up to 8 MiB each and the total harvest is capped at
 8 MiB. Setup records every path in `selection.jsonl`, including the ones it
-could not resolve on this machine. The generated runbook records that the
-workspace uses existing real files, and cleanup preserves them. Use this only
+could not resolve on this machine. Setup tells you when the workspace uses
+existing real files, and cleanup preserves them. Use this only
 on systems and accounts included in an authorized assessment; the bundle
 contains real credential material.
 

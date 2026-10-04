@@ -161,23 +161,25 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertTrue(report["checks"]["pcap_exact_request_body"])
         self.assertTrue(report["checks"]["pcap_response_204_same_connection"])
 
-    def test_setup_generates_only_endpoint_commands_and_preserves_ownership(self):
+    def test_test_prints_only_endpoint_commands_and_preserves_ownership(self):
         plan=self.root/"plan.json"
         existing=self.root/"existing"
         existing.write_text("preserve")
         plan.write_text(json.dumps({"sample":[str(existing),"<workspace>/.env"]}))
         workspace=self.root/"workspace"
         args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,evidence_profile="endpoint")
+        output=io.StringIO()
         with patch.object(op.os,"geteuid",return_value=501), \
              patch.object(op.subprocess,"Popen",side_effect=AssertionError("No sudo/tcpdump/processes")), \
-             contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(op.setup(args),0)
-        commands=(workspace/"RUNBOOK.md").read_text()
+             contextlib.redirect_stdout(output):
+            self.assertEqual(op.test(args),0)
+        commands=output.getvalue()
         for forbidden in (str(op.CLI)+" capture","--pcap","sudo","tcpdump"):
             self.assertNotIn(forbidden,commands)
         self.assertIn("spite watch "+str(workspace),commands)
         self.assertIn("spite done "+str(workspace),commands)
         self.assertNotIn("RUN_FOLDER",commands)
+        self.assertFalse((workspace/"RUNBOOK.md").exists())
         for name in ("preparation.json","setup-result.json"):
             self.assertEqual(json.loads((workspace/name).read_text())["evidence_profile"],"endpoint")
         setup_result=json.loads((workspace/"setup-result.json").read_text())
@@ -293,41 +295,45 @@ class EndpointProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.verify_endpoint(args)
 
-    def test_setup_destination_writes_remote_prompt_and_skips_local_receiver(self):
+    def test_test_destination_prints_remote_prompt_and_skips_local_receiver(self):
         plan=self.root/"plan.json"
         plan.write_text(json.dumps({"sample":["<workspace>/.env"]}))
         workspace=self.root/"workspace"
         args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
                                 evidence_profile="endpoint",destination="https://collector.example.test/report")
+        output=io.StringIO()
         with patch.object(op.os,"geteuid",return_value=501), \
              patch.object(op.subprocess,"Popen",side_effect=AssertionError("No sudo/tcpdump/processes")), \
-             contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(op.setup(args),0)
-        runbook=(workspace/"RUNBOOK.md").read_text()
-        self.assertIn("--send-to https://collector.example.test/report",runbook)
-        self.assertIn("Tell the agent to use the skill and send to your receiver",runbook)
-        self.assertNotIn(str(op.CLI)+" receive",runbook)
-        self.assertIn("start your receiver",runbook)
+             contextlib.redirect_stdout(output):
+            self.assertEqual(op.test(args),0)
+        prompts=output.getvalue()
+        self.assertIn("--send-to https://collector.example.test/report",prompts)
+        self.assertIn("Tell the agent to use the skill and send to your receiver",prompts)
+        self.assertNotIn(str(op.CLI)+" receive",prompts)
+        self.assertIn("Start your receiver at https://collector.example.test/report",prompts)
+        self.assertFalse((workspace/"RUNBOOK.md").exists())
         saved=json.loads((workspace/"verification.json").read_text())
         self.assertEqual(saved["destination"],"https://collector.example.test/report")
         self.assertIsNone(saved["receipt"])
         self.assertEqual(json.loads((workspace/"setup-result.json").read_text())["destination"],
                          "https://collector.example.test/report")
 
-    def test_setup_local_destination_keeps_receiver_command(self):
+    def test_test_local_destination_keeps_receiver_command(self):
         plan=self.root/"plan.json"
         plan.write_text(json.dumps({"sample":["<workspace>/.env"]}))
         workspace=self.root/"workspace"
         destination="http://127.0.0.1:8765/spite"
         args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
                                 evidence_profile="endpoint",destination=destination)
+        output=io.StringIO()
         with patch.object(op.os,"geteuid",return_value=501), \
              patch.object(op.subprocess,"Popen",side_effect=AssertionError("No sudo/tcpdump/processes")), \
-             contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(op.setup(args),0)
-        runbook=(workspace/"RUNBOOK.md").read_text()
-        self.assertIn("--send-to "+destination,runbook)
-        self.assertIn("spite watch "+str(workspace),runbook)
+             contextlib.redirect_stdout(output):
+            self.assertEqual(op.test(args),0)
+        prompts=output.getvalue()
+        self.assertIn("--send-to "+destination,prompts)
+        self.assertIn("spite watch "+str(workspace),prompts)
+        self.assertFalse((workspace/"RUNBOOK.md").exists())
         self.assertEqual(json.loads((workspace/"verification.json").read_text())["receipt"],
                          str(workspace/"evidence/sample.jsonl"))
 
@@ -338,10 +344,12 @@ class EndpointProfileTests(unittest.TestCase):
         destination="https://collector.example.test/report?name=purple&step=1"
         args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
                                 evidence_profile="endpoint",destination=destination)
+        output=io.StringIO()
         with patch.object(op.os,"geteuid",return_value=501), \
-             contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(op.setup(args),0)
-        self.assertIn("--send-to '"+destination+"'",(workspace/"RUNBOOK.md").read_text())
+             contextlib.redirect_stdout(output):
+            self.assertEqual(op.test(args),0)
+        self.assertIn("--send-to '"+destination+"'",output.getvalue())
+        self.assertFalse((workspace/"RUNBOOK.md").exists())
 
     def test_cli_verify_accepts_destination_without_receipt(self):
         args,_=self.artifacts(destination="https://collector.example.test/report")
