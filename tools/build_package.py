@@ -21,7 +21,7 @@ if __name__=="__main__":
     for folder in ("macos","tools","skills","variants","profiles","plans","tests"):
         files.extend(p for p in (ROOT/folder).rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix!=".pyc")
     files.extend(ROOT/name for name in (
-        "README.md","OPERATOR.md","TEST-CASES.md","RESEARCH.md","DETECTIONS.md",
+        "README.md","OPERATOR.md","TEST-CASES.md","DETECTIONS.md",
         "CHANGELOG.md","CONTRIBUTING.md","CODE_OF_CONDUCT.md","SECURITY.md","LICENSE","VERSION","spite"))
     hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
     with zipfile.ZipFile(target,"w",compression=zipfile.ZIP_DEFLATED) as archive:
