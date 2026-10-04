@@ -30,6 +30,9 @@ class CombinedSetupTests(unittest.TestCase):
         self.assertIn("benign (false-positive control)", test_help)
         for hidden in ("--variant", "--mode", "--target", "--plan", "--apply"):
             self.assertNotIn(hidden + " ", test_help)
+        done_help = subprocess.run([str(op.CLI), "done", "--help"], cwd=op.ROOT,
+                                   text=True, capture_output=True, check=True).stdout
+        self.assertNotIn("--set", done_help)
 
     def test_standard_file_list_keeps_credential_shaped_host_paths(self):
         groups=json.loads((op.ROOT/"plans/macos-default.json").read_text())
@@ -154,8 +157,7 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertEqual(result["evidence_profile"],"endpoint")
             self.assertEqual(result["skill_variant"],"main")
             self.assertTrue((workspace/"RUNBOOK.md").is_file())
-            report=json.loads((workspace/"ENGAGEMENT-REPORT.json").read_text())
-            self.assertEqual(sorted(report["test_cases"]),["TC-01","TC-02","TC-03","TC-04","TC-05","TC-06"])
+            self.assertFalse((workspace/"ENGAGEMENT-REPORT.json").exists())
             self.assertIn("Next step:",output.getvalue())
 
     def test_target_profile_rejects_traversal_and_extra_fields(self):

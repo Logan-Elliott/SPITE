@@ -17,8 +17,7 @@ Trae config, localhost port 8765, and packet capture before preparing a test.
 
    Setup shows every requested path outside the workspace and asks once before
    writing files. It refuses an existing workspace and prints the exact prompts
-   to paste into the agent. It also writes `RUNBOOK.md` and
-   `ENGAGEMENT-REPORT.json` inside the workspace.
+   to paste into the agent. It also writes `RUNBOOK.md` inside the workspace.
 
 2. Open the workspace in the target agent. Paste prompt 1, **Let the agent
    pick the skill**, into a fresh conversation. If the agent did not choose the
@@ -48,24 +47,21 @@ labels describe saved files and transfer evidence. Skill selection, process
 ancestry, and EDR or SIEM findings need the agent trace and sensor records; the
 results table marks undecidable outcomes `unknown` and says where to check.
 
-4. Finish the report and review cleanup:
+4. Review cleanup:
 
    ```sh
    spite done "$HOME/spite-exercise"
    ```
 
-`done` asks for the target product version, model, permission setting, and
-sensor outcome. It fills in the workspace, times, run IDs, run folders,
-verification, and case outcomes from saved records. It lists unchanged files
-created by setup and asks before removing them. Changed, replaced, missing,
-symlinked, and existing real files are kept. The authoritative cleanup record
-is in a private `.spite-state` folder beside the workspace; editing the copy
-inside the workspace cannot add deletion targets.
+`done` lists unchanged files created by setup and asks before removing them.
+Changed, replaced, missing, symlinked, and existing real files are kept. The
+authoritative cleanup record is in a private `.spite-state` folder beside the
+workspace; editing the copy inside the workspace cannot add deletion targets.
 
-For a script, provide the answers and approve removal without prompts:
+For a script, approve removal without a prompt:
 
 ```sh
-spite done "$HOME/spite-exercise" --set version=1.0 --set model=example --set permission=standard --set sensor=reviewed --yes
+spite done "$HOME/spite-exercise" --yes
 ```
 
 If setup stops after creating files, it prints a cleanup command. Use that
@@ -204,6 +200,7 @@ maps to `spite test`, `--test response` maps to `spite test hierarchy`, and
 for scripts that use them.
 
 Keep the agent transcript and tool trace, target product version, model,
-permission setting, run folder, verification report, and relevant process,
-file, network, and alert identifiers. Use [TEST-CASES.md](TEST-CASES.md) to
-record outcomes and [DETECTIONS.md](DETECTIONS.md) to review telemetry.
+permission setting, run folder, verification results, and relevant process,
+file, network, and alert identifiers for your own reporting. Use
+[TEST-CASES.md](TEST-CASES.md) to record outcomes and [DETECTIONS.md](DETECTIONS.md)
+to review telemetry.

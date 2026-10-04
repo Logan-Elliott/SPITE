@@ -435,19 +435,6 @@ def setup(args):
          phase="preparation",evidence_profile=profile,destination=destination_url,harvest=source,
          target_profile=target["id"],target_profile_source=str(target_path),cleanup_state_id=state_id))
     dump(workspace / "target-profile.json", target)
-    dump(workspace / "ENGAGEMENT-REPORT.json", {
-        "workspace": str(workspace),
-        "target_product": target["display_name"],
-        "target_version": None,
-        "model": None,
-        "permission_setting": None,
-        "sensor_outcome": None,
-        "start_utc": None,
-        "end_utc": None,
-        "runs": [],
-        "test_cases": {"TC-{:02d}".format(number): {"outcome": "not-run", "alert_ids": [], "notes": ""}
-                       for number in range(1, 7)},
-    })
     try:
         summary, failed = prepare(
             plan, workspace, workspace / "batches", source=source,
@@ -751,7 +738,7 @@ def verify(args):
     if not offline and not destination and receipt_path is None:
         receipt_path = ask_path(None, "HTTP receipt log: ")
     pcap_path = ask_path(args.pcap, "Stopped packet capture (.pcap): ") if profile == "pcap" else None
-    output = ask_path(args.output, "New verification report path: ")
+    output = ask_path(args.output, "New verification results path: ")
     if output.exists():
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         output = output.with_name(output.stem + "-" + stamp + output.suffix)
@@ -857,7 +844,7 @@ def verify(args):
         print(json.dumps(report,indent=2))
     else:
         label = "ARTIFACTS VERIFIED" if report["status"] == "VERIFIED" else report["status"]
-        print("{} — report saved to {}".format(label, output))
+        print("{} — verification results saved to {}".format(label, output))
         failed_checks = [name for name, passed in checks.items() if not passed]
         if failed_checks:
             print("Failed checks: " + ", ".join(failed_checks))
@@ -975,10 +962,9 @@ def main():
     p.add_argument("workspace",help="Prepared exercise workspace")
     p.add_argument("--offline",action="store_true",help="Check the newest run that did not use a receiver")
     p.add_argument("--timeout",type=int,default=900,help="Seconds to wait for a transfer (default: 900)")
-    p=sub.add_parser("done",help="Complete the report and clean the workspace")
+    p=sub.add_parser("done",help="Remove unchanged files created by setup",
+                     description="Show unchanged files created by setup and ask before removing them.")
     p.add_argument("workspace",help="Prepared exercise workspace")
-    p.add_argument("--set",dest="settings",action="append",default=[],metavar="KEY=VALUE",
-                   help="Supply version, model, permission, or sensor without a prompt")
     p.add_argument("-y","--yes",action="store_true",help="Remove eligible setup files without asking")
     p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
     p=sub.add_parser("init",aliases=("setup",),help="Create an exercise workspace",
@@ -1044,7 +1030,7 @@ def main():
     handlers = {
         "test": test,
         "watch": lambda request: module_from(ROOT / "tools/watch_flow.py", "watch_flow").watch(request, SimpleNamespace(**globals())),
-        "done": lambda request: module_from(ROOT / "tools/done_flow.py", "done_flow").done(request, SimpleNamespace(**globals())),
+        "done": cleanup,
         "init": setup, "setup": setup,
         "receive": receiver, "receiver": receiver,
         "capture": capture, "verify": verify,

@@ -41,17 +41,17 @@ agent that supports project-local `SKILL.md` packages. Install the command with
    was one, and the transfer run. It prints the results and the run folders it
    used. Save the agent transcript and any sensor records.
 
-3. Fill in the product, model, permission, and sensor details and review
-   cleanup:
+3. Review cleanup:
 
    ```sh
    spite done "$HOME/spite-exercise"
    ```
 
-`done` writes the final `ENGAGEMENT-REPORT.json`, lists unchanged files made by
-setup, and asks before removing them. Setup also writes `RUNBOOK.md`. The
-authoritative cleanup record is in a private `.spite-state` folder beside the
-workspace; editing the workspace copy cannot add deletion targets.
+`done` lists unchanged files made by setup and asks before removing them.
+Keep the agent transcript, results, and sensor records for your own reporting.
+Setup also writes `RUNBOOK.md`. The authoritative cleanup record is in a
+private `.spite-state` folder beside the workspace; editing the workspace copy
+cannot add deletion targets.
 
 See [OPERATOR.md](OPERATOR.md) for the full operator guide and the two optional
 named tests.

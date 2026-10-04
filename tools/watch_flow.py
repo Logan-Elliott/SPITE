@@ -3,12 +3,10 @@ import argparse
 import contextlib
 import io
 import json
-import os
 from pathlib import Path
 import select
 import shlex
 import signal
-import stat
 import subprocess
 import sys
 import time
@@ -256,27 +254,8 @@ def _print_results(report, outcomes):
         print("Verification could not complete: " + str(report["error"]))
 
 
-def _record_results(workspace, result):
-    path = workspace / "watch-results.jsonl"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    descriptor = os.open(path, flags, 0o600)
-    try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise ValueError("Watch results path must be a regular file")
-        with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
-            descriptor = None
-            stream.write(json.dumps(result, sort_keys=True) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-
-
-def _verify_and_record(workspace, saved, ops, run, offline, receipt=None, pcap=None,
-                       destination=None, reason=None):
+def _verify_and_show(saved, ops, run, offline, receipt=None, pcap=None,
+                     destination=None, reason=None):
     report = None
     output = None
     if run is not None:
@@ -304,22 +283,8 @@ def _verify_and_record(workspace, saved, ops, run, offline, receipt=None, pcap=N
     outcomes = score_test_cases(report, offline)
     _print_results(report, outcomes)
     if report is not None:
-        print("Verification report: " + str(output))
-    events = _read_events(run) if run else []
-    result = {
-        "timestamp": ops.utc(),
-        "run_id": (report.get("run_id") if report else None) or
-                  (events[0].get("run_id") if events else None),
-        "run_folder": str(run) if run else None,
-        "status": report.get("status", "INCOMPLETE") if report else "INCOMPLETE",
-        "verification_report": str(output) if report else None,
-        "test_cases": outcomes,
-        "offline": offline,
-        "started_utc": report.get("start_utc") if report else None,
-        "verified_utc": report.get("verified_utc") if report else None,
-    }
-    _record_results(workspace, result)
-    return result["status"]
+        print("Verification results: " + str(output))
+    return report.get("status", "INCOMPLETE") if report else "INCOMPLETE"
 
 
 def watch(args, ops):
@@ -353,7 +318,7 @@ def watch(args, ops):
         earlier_run = newest_run(workspace, terminal=True, no_receiver=True)
         if earlier_run is not None:
             print("Earlier run without a receiver:")
-            earlier_status = _verify_and_record(workspace, saved, ops, earlier_run, True)
+            earlier_status = _verify_and_show(saved, ops, earlier_run, True)
             print("")
     try:
         if offline:
@@ -401,8 +366,8 @@ def watch(args, ops):
 
     if earlier_status is not None:
         print("Transfer run:")
-    status = _verify_and_record(workspace, saved, ops, run, offline, receipt, pcap,
-                                destination, reason)
+    status = _verify_and_show(saved, ops, run, offline, receipt, pcap,
+                              destination, reason)
     if earlier_status == "FAIL" or status == "FAIL":
         status = "FAIL"
     elif earlier_status == "INCOMPLETE" or status == "INCOMPLETE":

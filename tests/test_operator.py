@@ -239,11 +239,11 @@ class ThreeCommandResultsTests(unittest.TestCase):
             self.assertIn("unknown", output.getvalue())
             self.assertIn("not-run", output.getvalue())
             self.assertIn("Next: spite done " + str(workspace), output.getvalue())
-            result = json.loads((workspace / "watch-results.jsonl").read_text().splitlines()[0])
-            self.assertEqual(result["run_folder"], str(second))
-            self.assertEqual(result["status"], "VERIFIED")
-            self.assertEqual(result["test_cases"]["TC-03"], "unknown")
-            self.assertEqual(result["test_cases"]["TC-05"], "not-run")
+            reports = [json.loads(path.read_text()) for path in (workspace / "evidence").glob("*watch*.json")]
+            self.assertEqual(len(reports), 1)
+            self.assertEqual(reports[0]["status"], "VERIFIED")
+            self.assertEqual(reports[0]["run_id"], json.loads((second / "events.jsonl").read_text().splitlines()[0])["run_id"])
+            self.assertFalse((workspace / "watch-results.jsonl").exists())
 
     def test_normal_watch_checks_prior_offline_run_and_transfer(self):
         for scenario in (None, "verified", "changed", "incomplete"):
@@ -312,15 +312,16 @@ class ThreeCommandResultsTests(unittest.TestCase):
                     status = watch.watch(argparse.Namespace(workspace=str(workspace), offline=False, timeout=1),
                                          SimpleNamespace(**vars(op)))
                 self.assertEqual(status, 1 if scenario in ("changed", "incomplete") else 0)
-                results = [json.loads(line) for line in (workspace / "watch-results.jsonl").read_text().splitlines()]
-                self.assertEqual(len(results), 1 if scenario is None else 2)
+                reports = [json.loads(path.read_text()) for path in (workspace / "evidence").glob("*watch*.json")]
+                self.assertEqual(len(reports), 1 if scenario is None else 2)
                 if offline_run is not None:
-                    self.assertEqual(results[0]["run_folder"], str(offline_run))
-                    self.assertTrue(results[0]["offline"])
-                    self.assertEqual(results[0]["status"], "FAIL" if scenario in ("changed", "incomplete") else "VERIFIED")
                     self.assertIn(str(offline_run), output.getvalue())
-                self.assertFalse(results[-1]["offline"])
-                self.assertEqual(results[-1]["status"], "VERIFIED")
+                displayed = [line.removeprefix("Result: ") for line in output.getvalue().splitlines()
+                             if line.startswith("Result: ")]
+                self.assertEqual(displayed, (["FAIL" if scenario in ("changed", "incomplete")
+                                              else "VERIFIED"] if offline_run is not None else []) + ["VERIFIED"])
+                self.assertTrue(any(report["status"] == "VERIFIED" for report in reports))
+                self.assertFalse((workspace / "watch-results.jsonl").exists())
                 self.assertIn("Next: spite done " + str(workspace), output.getvalue())
 
     def test_watch_translates_failed_checks_without_internal_keys(self):
@@ -354,62 +355,57 @@ class ThreeCommandResultsTests(unittest.TestCase):
             workspace, _, newest = self.prepared_run(Path(temporary).resolve())
             (newest / "diagnostics.b64").write_bytes(b"changed")
             watch = op.module_from(op.ROOT / "tools/watch_flow.py", "failed_watch_test")
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
-                                            SimpleNamespace(**vars(op))), 1)
-            result = json.loads((workspace / "watch-results.jsonl").read_text().splitlines()[0])
-            self.assertEqual(result["status"], "FAIL")
-
-    def test_done_fills_report_from_watch_results_and_uses_guarded_cleanup(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            workspace, _, second = self.prepared_run(Path(temporary).resolve())
-            watch = op.module_from(op.ROOT / "tools/watch_flow.py", "watch_for_done")
-            request = argparse.Namespace(workspace=str(workspace), offline=True, timeout=1)
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(watch.watch(request, SimpleNamespace(**vars(op))), 0)
-            done = op.module_from(op.ROOT / "tools/done_flow.py", "done_test")
-            supplied = ["version=1.0", "model=test-model", "permission=approved",
-                        "sensor=no alert fired"]
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                self.assertEqual(done.done(argparse.Namespace(workspace=str(workspace),
-                                      settings=supplied, yes=True), SimpleNamespace(**vars(op))), 0)
-            report = json.loads((workspace / "ENGAGEMENT-REPORT.json").read_text())
-            self.assertEqual(report["target_version"], "1.0")
-            self.assertEqual(report["model"], "test-model")
-            self.assertEqual(report["permission_setting"], "approved")
-            self.assertEqual(report["sensor_outcome"], "no alert fired")
-            self.assertEqual(report["runs"][0]["run_folder"], str(second))
-            self.assertEqual(report["runs"][0]["status"], "VERIFIED")
-            self.assertEqual(report["test_cases"]["TC-03"]["outcome"], "unknown")
-            self.assertEqual(report["test_cases"]["TC-05"]["outcome"], "not-run")
-            self.assertIsNotNone(report["start_utc"])
-            self.assertIsNotNone(report["end_utc"])
-            self.assertFalse((workspace / "fake.env").exists())
-            self.assertTrue((workspace / "ENGAGEMENT-REPORT.json").is_file())
+                self.assertEqual(watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
+                                            SimpleNamespace(**vars(op))), 1)
+            reports = [json.loads(path.read_text()) for path in (workspace / "evidence").glob("*watch*.json")]
+            self.assertEqual(len(reports), 1)
+            self.assertEqual(reports[0]["status"], "FAIL")
+            self.assertIn("Result: FAIL", output.getvalue())
+            self.assertFalse((workspace / "watch-results.jsonl").exists())
 
-    def test_done_keeps_incomplete_watch_attempt_without_inventing_a_run(self):
+    def test_done_cleans_without_report_or_watch_results(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace, _, second = self.prepared_run(Path(temporary).resolve())
+            self.assertFalse((workspace / "ENGAGEMENT-REPORT.json").exists())
+            self.assertFalse((workspace / "watch-results.jsonl").exists())
+            output = io.StringIO()
+            argv = ["exercise_ops.py", "done", str(workspace), "--yes"]
+            with patch.object(sys, "argv", argv), patch("builtins.input", side_effect=AssertionError("No prompt expected")), \
+                 contextlib.redirect_stdout(output):
+                self.assertEqual(op.main(), 0)
+            self.assertFalse((workspace / "fake.env").exists())
+            self.assertTrue(second.is_dir())
+            self.assertIn(str(workspace / "fake.env"), output.getvalue())
+            self.assertIn("Removed ", output.getvalue())
+            self.assertFalse((workspace / "ENGAGEMENT-REPORT.json").exists())
+
+    def test_done_asks_only_for_cleanup_and_preserves_changed_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             workspace = root / "workspace"
             plan = root / "plan.json"
-            plan.write_text(json.dumps({"sample": ["<workspace>/fake.env"]}))
+            existing = root / "existing.env"
+            existing.write_text("real contents")
+            plan.write_text(json.dumps({"sample": ["<workspace>/fake.env", str(existing)]}))
             with patch.object(op.os, "geteuid", return_value=501), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.setup(argparse.Namespace(plan=str(plan), workspace=str(workspace), yes=True)), 0)
-            watch = op.module_from(op.ROOT / "tools/watch_flow.py", "empty_watch_test")
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
-                                            SimpleNamespace(**vars(op))), 2)
-            done = op.module_from(op.ROOT / "tools/done_flow.py", "empty_done_test")
-            request = argparse.Namespace(workspace=str(workspace), yes=True,
-                                         settings=["version=1", "model=test", "permission=standard", "sensor=not checked"])
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(done.done(request, SimpleNamespace(**vars(op))), 0)
-            report = json.loads((workspace / "ENGAGEMENT-REPORT.json").read_text())
-            self.assertEqual(report["runs"], [])
-            self.assertIsNone(report["start_utc"])
-            self.assertEqual(report["watch_results"][0]["status"], "INCOMPLETE")
-            self.assertIsNotNone(report["prepared_utc"])
+            changed = workspace / "fake.env"
+            changed.write_text("operator changed this file")
+            old_report = workspace / "ENGAGEMENT-REPORT.json"
+            old_report.write_text("not valid JSON")
+            output = io.StringIO()
+            argv = ["exercise_ops.py", "done", str(workspace)]
+            with patch.object(sys, "argv", argv), patch("builtins.input", return_value="y") as answer, \
+                 contextlib.redirect_stdout(output):
+                self.assertEqual(op.main(), 0)
+            answer.assert_called_once()
+            self.assertIn("Remove the ", answer.call_args.args[0])
+            self.assertEqual(changed.read_text(), "operator changed this file")
+            self.assertEqual(existing.read_text(), "real contents")
+            self.assertIn("Preserve " + str(changed), output.getvalue())
+            self.assertEqual(old_report.read_text(), "not valid JSON")
 
 
 if __name__=="__main__":unittest.main()

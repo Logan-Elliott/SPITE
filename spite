@@ -11,7 +11,7 @@ SPITE: Skill Poisoning and Instruction Trust Evaluation
 Usage:
   spite test [NAME]          Prepare an exercise workspace
   spite watch <workspace>    Watch the transfer and show results
-  spite done <workspace>     Save the report and clean up
+  spite done <workspace>     Remove unchanged files created by setup
   spite doctor               Check this system before an exercise
   spite install              Install this package in ~/.local
   spite update               Update the command from this package
