@@ -1,7 +1,7 @@
 # SPITE: Skill Poisoning and Instruction Trust Evaluation
 
-A macOS purple team tool for testing whether a coding agent discovers, trusts,
-and runs a malicious project skill.
+A purple team tool for macOS and Linux that tests whether a coding agent
+discovers, trusts, and runs a malicious project skill.
 
 Setup can either create synthetic fake credential files or select existing real
 files, and the bundle can be sent to a receiver. By default the receiver is on
@@ -13,13 +13,11 @@ files; real mode reads only the exact paths in the file list.
 
 ## Quick start
 
-Requirements: macOS, Python 3.9+, a disposable project or test account, and an
-agent that supports project-local `SKILL.md` packages. Install the command with
-`./spite install`, or use `./spite` in place of `spite` below.
-
-The Quick Start and packaged `spite` command target macOS. SPITE's Python file
-preparation, runner, localhost receiver, and bundle and receipt verification
-also work on Linux; see [Linux support](OPERATOR.md#linux-support) for the limits.
+Requirements: macOS or Linux, `/bin/zsh`, Python 3.9+, a disposable project or
+test account, and an agent that supports project-local `SKILL.md` packages.
+Install the command with `./spite install`, or use `./spite` in place of `spite`
+below. On Linux, use the standard test without `--pcap`; see
+[Linux support](OPERATOR.md#linux-support) for setup details.
 
 1. Prepare the standard test:
 
@@ -66,7 +64,7 @@ Installation copies a self-contained versioned package under `~/.local/lib/spite
 and links `~/.local/bin/spite` to it, so the extracted download can be moved or
 removed. Run `./spite update` from a newer extracted package to update the command,
 or `spite uninstall` to remove the command while keeping the installed package.
-Run `spite doctor` to check the host before an exercise.
+On macOS, run `spite doctor` to check the host before an exercise.
 
 For scripts, provide the workspace and skip setup confirmation:
 
@@ -74,7 +72,8 @@ For scripts, provide the workspace and skip setup confirmation:
 spite test --workspace "$HOME/spite-exercise" --yes
 ```
 
-Add packet capture when you need PCAP evidence from the localhost transfer:
+On macOS, add packet capture when you need PCAP evidence from the localhost
+transfer:
 
 ```sh
 spite test --pcap
@@ -116,7 +115,7 @@ project skill path. Confirm that path against the product version used in the
 engagement.
 
 The standard test uses eight representative synthetic files. To use one group
-from the larger macOS list:
+from the expanded file list:
 
 ```sh
 spite test --file-list plans/macos-expanded.json --group developer

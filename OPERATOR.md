@@ -5,20 +5,22 @@ start the agent or run the skill. Use a disposable project or test account.
 
 ## Linux support
 
-The Python file preparation, runner, localhost receiver, and bundle and receipt
-verification work on Linux. Path lookup finds browser and agent files in Linux
-config directories, including XDG, snap, and Flatpak locations. Synthetic
-browser and agent paths use `~/.spite-exercise/`; real harvest records paths it
-cannot find.
+On Linux, install zsh at `/bin/zsh` and Python 3.9 or newer at
+`/usr/bin/python3` or `/usr/local/bin/python3`. From the SPITE directory, run
+`./spite install`, then use the same `spite test`, `spite watch`, and
+`spite done` steps below. If your shell says `spite` is not found, run the
+commands as `./spite` from the SPITE directory instead.
 
-The packaged `spite` command and the steps below target macOS. `spite doctor`
-and PCAP capture are macOS-specific.
+Leave `--pcap` off on Linux. `spite doctor` and packet capture work only on
+macOS. Linux setup also looks for browser and agent files in XDG, snap, and
+Flatpak locations. Synthetic browser and agent files go under
+`~/.spite-exercise/`; real harvest reports paths it cannot find.
 
 ## Run the standard test
 
 Install the command once with `./spite install`, or use `./spite` in place of
-`spite` below. Run `spite doctor` to check macOS, Python, zsh, the package, the
-Trae config, localhost port 8765, and packet capture before preparing a test.
+`spite` below. On macOS, run `spite doctor` to check the host before preparing
+a test.
 
 1. Prepare a new workspace:
 
@@ -111,7 +113,7 @@ Agent behavior can vary between conversations. When comparing products or
 settings, run each condition several times, alternate the order of the normal
 and benign workspaces, and record every result.
 
-## Capture a PCAP
+## Capture a PCAP on macOS
 
 Use packet capture when the engagement needs packet-level loopback evidence:
 
@@ -173,7 +175,7 @@ To test another agent that supports `SKILL.md`, copy
 spite test --target-config /absolute/path/to/target.json
 ```
 
-The standard file list contains eight representative paths. The expanded macOS
+The standard file list contains eight representative paths. The expanded file
 list has three groups. Choose one group per workspace:
 
 ```sh
