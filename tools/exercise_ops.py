@@ -422,14 +422,14 @@ def setup(args):
                     expanded.relative_to(workspace)
                 except ValueError:
                     outside_workspace.append(expanded)
-    if uses_manifest and (getattr(args, "show_targets", False) or outside_workspace):
-        heading = "Requested paths outside the workspace" if outside_workspace and not getattr(args, "show_targets", False) else "Requested file paths"
+    missing_locations = [raw for raw, expanded in resolved_paths if expanded is None]
+    if uses_manifest and (getattr(args, "show_targets", False) or outside_workspace or missing_locations):
+        heading = "Requested file paths"
         note = "read from the filesystem when present" if source == "real" else "existing paths will be skipped"
         print("\n{} ({}):".format(heading, note))
         for raw, expanded in resolved_paths:
             if expanded is None:
-                if getattr(args, "show_targets", False):
-                    print("  {}  (not found on this machine)".format(raw))
+                print("  {}  (location not found on this machine; skipped)".format(raw))
             elif getattr(args, "show_targets", False) or expanded in outside_workspace:
                 print("  " + str(expanded))
     if variant_name == "main" and source == "real":
@@ -543,9 +543,10 @@ def setup(args):
         print("\nReal files: {} collected, {} missing, {} unavailable, {} over the size cap, {} unresolved".format(
             totals["collected"], totals["missing"], totals["unusable"], totals["oversize"], totals["unresolved"]))
     elif summary:
-        totals = {key: sum(result[key] for result in summary.values()) for key in ("created","skipped_exists","failed")}
-        print("\nFake files: {} created, {} already present, {} failed".format(
-            totals["created"], totals["skipped_exists"], totals["failed"]))
+        totals = {key: sum(result.get(key, 0) for result in summary.values())
+                  for key in ("created", "skipped_exists", "unavailable", "failed")}
+        print("\nFake files: {} created, {} already present, {} not found, {} failed".format(
+            totals["created"], totals["skipped_exists"], totals["unavailable"], totals["failed"]))
     print("\nStatus:", "READY" if ready else "INCOMPLETE")
     print("No test was run.")
     if ready:

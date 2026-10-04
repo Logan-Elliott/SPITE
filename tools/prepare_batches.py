@@ -82,17 +82,21 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None):
                     counts[event] += 1
                     log.write(json.dumps(record) + "\n")
             else:
-                counts = dict(created=0, skipped_exists=0, failed=0)
+                counts = dict(created=0, skipped_exists=0, failed=0, unavailable=0)
                 digest = hashlib.sha256(MOCK_DATA).hexdigest()
                 for raw, path in targets:
-                    record = dict(phase="pre-exercise-seeding", batch=batch, path=str(path),
+                    record = dict(phase="pre-exercise-seeding", batch=batch,
+                                  path=str(path) if path is not None else raw,
                                   timestamp=datetime.now(timezone.utc).isoformat())
-                    try:
-                        event = seed_file(path)
-                    except (OSError, ValueError) as exc:
-                        event = "failed"
-                        record["error"] = str(exc)
-                        failed = True
+                    if path is None:
+                        event = "unavailable"
+                    else:
+                        try:
+                            event = seed_file(path)
+                        except (OSError, ValueError) as exc:
+                            event = "failed"
+                            record["error"] = str(exc)
+                            failed = True
                     record["event"] = event
                     counts[event] += 1
                     log.write(json.dumps(record) + "\n")

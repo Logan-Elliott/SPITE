@@ -2,10 +2,8 @@
 """Resolve profile placeholders in plan paths to directories on this machine.
 
 A placeholder expands to a full directory and must start the path, for example
-"<chrome-profile>/Login Data". Synthetic runs map every placeholder to an
-isolated directory under the user's home so they never touch a real profile.
-Real runs discover the directory the product created on this machine, or leave
-the entry unresolved when the product is not installed.
+"<chrome-profile>/Login Data". Runs discover the directory the product created
+on this machine, or leave the entry unresolved when the product is not installed.
 
 Discovery checks the native macOS and Linux locations, honors XDG_CONFIG_HOME
 for Electron and Chromium-family applications, and also checks snap and flatpak
@@ -17,16 +15,8 @@ from pathlib import Path
 
 TOKEN = re.compile(r"<([a-z0-9-]+)>")
 
-SYNTHETIC_ROOT = ".spite-exercise"
-SYNTHETIC_NAMES = {
-    "chrome-profile": "chrome",
-    "brave-profile": "brave",
-    "edge-profile": "edge",
-    "firefox-profile": "firefox",
-    "trae-storage": "trae",
-    "openclaw-config": "openclaw-config",
-    "openclaw-home": "openclaw-home",
-}
+PROFILE_NAMES = ("chrome-profile", "brave-profile", "edge-profile", "firefox-profile",
+                 "trae-storage", "openclaw-config", "openclaw-home")
 
 # macOS relative root, native Linux config-relative roots, snap names, flatpak app ids.
 CHROMIUM = {
@@ -74,7 +64,8 @@ def _chromium_profile(root):
     for profile in candidates:
         if (profile / "Login Data").exists() or (profile / "Network/Cookies").exists():
             return profile
-    return candidates[0] if candidates else None
+    return next((profile for profile in candidates
+                 if profile.name == "Default" or re.fullmatch(r"Profile [0-9]+", profile.name)), None)
 
 
 def _read_ini(path):
@@ -115,8 +106,9 @@ def _firefox_profile(root):
             preferred = [p for p in candidates if ".default" in p.name]
             if preferred:
                 return preferred[0]
-            if candidates:
-                return candidates[0]
+            populated = [p for p in candidates if (p / "logins.json").exists()]
+            if populated:
+                return populated[0]
     return None
 
 
@@ -188,10 +180,8 @@ def resolve(raw, workspace, source, home=None):
         name = match.group(1)
         if name == "workspace":
             return str(workspace)
-        if name not in SYNTHETIC_NAMES:
+        if name not in PROFILE_NAMES:
             raise ValueError("Unknown path placeholder: <{}>".format(name))
-        if source == "synthetic":
-            return str(home / SYNTHETIC_ROOT / SYNTHETIC_NAMES[name])
         found = discover(name, home)
         if found is None:
             unresolved.append(name)

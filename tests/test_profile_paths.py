@@ -1,4 +1,7 @@
+import base64
+import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -30,15 +33,20 @@ class EnvClean(unittest.TestCase):
 
 
 class ResolveTests(EnvClean):
-    def test_synthetic_maps_placeholders_to_isolated_absolute_dirs(self):
-        workspace = Path("/tmp/ws")
-        home = Path("/home/nobody")
-        self.assertEqual(profile_paths.resolve("<chrome-profile>/Login Data", workspace, "synthetic", home=home),
-                         home / ".spite-exercise/chrome/Login Data")
-        self.assertEqual(profile_paths.resolve("<trae-storage>/state.vscdb", workspace, "synthetic", home=home),
-                         home / ".spite-exercise/trae/state.vscdb")
-        self.assertEqual(profile_paths.resolve("<workspace>/config/secrets.json", workspace, "synthetic", home=home),
-                         workspace / "config/secrets.json")
+    def test_synthetic_and_real_use_the_same_discovered_profiles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            chrome = chromium_profile(home / ".config/google-chrome", login=False)
+            trae = home / ".config/Trae/User/globalStorage"
+            trae.mkdir(parents=True)
+            workspace = home / "workspace"
+            for source in ("synthetic", "real"):
+                self.assertEqual(profile_paths.resolve("<chrome-profile>/Login Data", workspace, source, home=home),
+                                 chrome / "Login Data")
+                self.assertEqual(profile_paths.resolve("<trae-storage>/state.vscdb", workspace, source, home=home),
+                                 trae / "state.vscdb")
+                self.assertEqual(profile_paths.resolve("<workspace>/config/secrets.json", workspace, source, home=home),
+                                 workspace / "config/secrets.json")
 
     def test_unknown_placeholder_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -63,6 +71,14 @@ class DiscoverTests(EnvClean):
             home = Path(directory).resolve()
             wanted = chromium_profile(home / "Library/Application Support/Google/Chrome", "Default")
             self.assertEqual(profile_paths.discover("chrome-profile", home), wanted)
+
+    def test_browser_support_directories_are_not_profiles(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            (home / ".config/google-chrome/Crashpad").mkdir(parents=True)
+            (home / ".mozilla/firefox/Crash Reports").mkdir(parents=True)
+            self.assertIsNone(profile_paths.discover("chrome-profile", home))
+            self.assertIsNone(profile_paths.discover("firefox-profile", home))
 
     def test_chromium_honors_xdg_config_home(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -119,25 +135,86 @@ class DiscoverTests(EnvClean):
             (wanted / "state.vscdb").write_bytes(b"sqlite")
             self.assertEqual(profile_paths.discover("trae-storage", home), wanted)
 
-    def test_missing_product_resolves_to_none_in_real_mode(self):
+    def test_missing_product_resolves_to_none_in_both_modes(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()
-            self.assertIsNone(profile_paths.resolve("<chrome-profile>/Login Data", Path("/tmp/ws"), "real", home=home))
+            for source in ("synthetic", "real"):
+                self.assertIsNone(profile_paths.resolve("<chrome-profile>/Login Data", Path("/tmp/ws"), source, home=home))
 
 
 class PreparePlaceholderTests(EnvClean):
-    def test_synthetic_creates_the_isolated_profile_path(self):
+    def test_synthetic_creates_missing_leaves_in_discovered_profiles(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
+            home = root / "home"
+            chrome = chromium_profile(home / ".config/google-chrome", login=False)
+            firefox = home / ".mozilla/firefox/abc.default-release"
+            firefox.mkdir(parents=True)
+            trae = home / ".config/Trae/User/globalStorage"
+            trae.mkdir(parents=True)
             workspace = root / "workspace"
             workspace.mkdir()
-            plan = {"sample": ["<chrome-profile>/Login Data"]}
-            with patch.dict(os.environ, {"HOME": str(root / "home")}):
+            plan = {"sample": ["<chrome-profile>/Login Data", "<firefox-profile>/logins.json",
+                               "<trae-storage>/state.vscdb"]}
+            with patch.dict(os.environ, {"HOME": str(home)}):
                 summary, failed = prepare_batches.prepare(plan, workspace, root / "out", source="synthetic")
             self.assertFalse(failed)
             manifest = json.loads((root / "out/sample.json").read_text())
-            self.assertEqual(manifest["files"][0]["path"],
-                             str(root / "home/.spite-exercise/chrome/Login Data"))
+            targets = [chrome / "Login Data", firefox / "logins.json", trae / "state.vscdb"]
+            self.assertEqual([entry["path"] for entry in manifest["files"]], [str(path) for path in targets])
+            for path in targets:
+                self.assertEqual(path.read_bytes(), prepare_batches.MOCK_DATA)
+            self.assertEqual(summary["sample"]["created"], 3)
+            self.assertFalse((home / ".spite-exercise").exists())
+            runner = prepare_batches.load_runner()
+            run = root / "run"
+            run.mkdir()
+            with patch.object(runner.tempfile, "mkdtemp", return_value=str(run)), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(runner.run(root / "out/sample.json"), 0)
+            payload = json.loads(base64.b64decode((run / "diagnostics.b64").read_bytes()))
+            for path in targets:
+                self.assertEqual(base64.b64decode(payload["credentials"][str(path)]),
+                                 prepare_batches.MOCK_DATA)
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                real_summary, real_failed = prepare_batches.prepare(plan, workspace, root / "real", source="real")
+            self.assertFalse(real_failed)
+            self.assertEqual(real_summary["sample"]["collected"], 3)
+            real_manifest = json.loads((root / "real/sample.json").read_text())
+            self.assertEqual([entry["path"] for entry in real_manifest["files"]], [str(path) for path in targets])
+
+    def test_synthetic_skips_an_existing_leaf_without_reading_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            profile = chromium_profile(home / ".config/google-chrome")
+            workspace = root / "workspace"
+            workspace.mkdir()
+            plan = {"sample": ["<chrome-profile>/Login Data"]}
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                summary, failed = prepare_batches.prepare(plan, workspace, root / "out", source="synthetic")
+            self.assertFalse(failed)
+            self.assertEqual((profile / "Login Data").read_bytes(), b"chrome login")
+            self.assertEqual(summary["sample"]["skipped_exists"], 1)
+            self.assertIsNone(summary["sample"]["manifest"])
+
+    def test_synthetic_records_missing_profiles_as_unavailable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            home = root / "home"
+            workspace = root / "workspace"
+            workspace.mkdir()
+            plan = {"sample": ["<chrome-profile>/Login Data", "<firefox-profile>/logins.json"]}
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                summary, failed = prepare_batches.prepare(plan, workspace, root / "out", source="synthetic")
+            self.assertFalse(failed)
+            self.assertEqual(summary["sample"]["unavailable"], 2)
+            self.assertIsNone(summary["sample"]["manifest"])
+            self.assertFalse((root / "out/sample.json").exists())
+            events = [json.loads(line) for line in (root / "out/seeding.jsonl").read_text().splitlines()]
+            self.assertEqual([event["event"] for event in events], ["unavailable", "unavailable"])
+            self.assertEqual([event["path"] for event in events], plan["sample"])
+            self.assertFalse(home.exists())
 
     def test_real_selects_discovered_profile_and_records_unresolved(self):
         with tempfile.TemporaryDirectory() as directory:
