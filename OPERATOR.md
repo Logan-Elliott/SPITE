@@ -3,6 +3,20 @@
 SPITE prepares a project skill for an authorized agent assessment. It does not
 start the agent or run the skill. Use a disposable project or test account.
 
+## Linux support
+
+The Python file preparation, runner, localhost receiver, and bundle and receipt
+verification work on Linux. Path lookup finds browser and agent files in Linux
+config directories, including XDG, snap, and Flatpak locations. Synthetic
+browser and agent paths use `~/.spite-exercise/`; real harvest records paths it
+cannot find.
+The Python checks run in Ubuntu CI, but a complete Linux agent and sensor
+exercise has not been validated.
+
+The packaged `spite` command and the steps below target macOS. The launcher
+requires `/bin/zsh`, `spite doctor` requires macOS, and PCAP capture and
+verification expect macOS `lo0` traffic in DLT_NULL format.
+
 ## Run the standard test
 
 Install the command once with `./spite install`, or use `./spite` in place of

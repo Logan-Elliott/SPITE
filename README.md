@@ -17,6 +17,10 @@ Requirements: macOS, Python 3.9+, a disposable project or test account, and an
 agent that supports project-local `SKILL.md` packages. Install the command with
 `./spite install`, or use `./spite` in place of `spite` below.
 
+The Quick Start and packaged `spite` command target macOS. SPITE's Python file
+preparation, runner, localhost receiver, and bundle and receipt verification
+also work on Linux; see [Linux support](OPERATOR.md#linux-support) for the limits.
+
 1. Prepare the standard test:
 
    ```sh
