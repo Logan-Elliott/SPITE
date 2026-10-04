@@ -186,7 +186,6 @@ bundle. Run real harvest only inside an authorized engagement.
 - [OPERATOR.md](OPERATOR.md): operator steps and commands
 - [TEST-CASES.md](TEST-CASES.md): MITRE mappings and evidence
 - [DETECTIONS.md](DETECTIONS.md): detection ideas for the defensive team
-- [SECURITY.md](SECURITY.md): security issue reporting
 
 Run `python3 tools/release_check.py` before publishing. It runs the tests, checks
 the source files and launchers, and builds a reproducible ZIP in `dist/`.

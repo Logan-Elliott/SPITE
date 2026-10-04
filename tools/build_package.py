@@ -22,7 +22,7 @@ if __name__=="__main__":
         files.extend(p for p in (ROOT/folder).rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix!=".pyc")
     files.extend(ROOT/name for name in (
         "README.md","OPERATOR.md","TEST-CASES.md","DETECTIONS.md",
-        "CHANGELOG.md","CONTRIBUTING.md","CODE_OF_CONDUCT.md","SECURITY.md","LICENSE","VERSION","spite"))
+        "CONTRIBUTING.md","LICENSE","VERSION","spite"))
     hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
     with zipfile.ZipFile(target,"w",compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(files):

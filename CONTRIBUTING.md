@@ -1,8 +1,7 @@
 # Contributing
 
 Use an issue to describe operator-facing changes before starting a large pull
-request. Security reports belong in the private process described in
-[SECURITY.md](SECURITY.md), not in a public issue.
+request.
 
 Keep the default exercise safe for an authorized, dedicated test account. Do not
 add live credentials, captured engagement data, remote payload downloads,
