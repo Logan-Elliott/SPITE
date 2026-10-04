@@ -43,7 +43,7 @@ def _read_events(run):
 
 
 def newest_run(workspace, mode=None, run_id=None, destination=None, terminal=False,
-               no_receiver=False, exclude_names=()):
+               no_receiver=False, exclude_names=(), include_unreadable=False):
     """Find the newest run recorded under this workspace."""
     root = Path(workspace) / "runs"
     if not root.is_dir() or root.is_symlink():
@@ -52,8 +52,10 @@ def newest_run(workspace, mode=None, run_id=None, destination=None, terminal=Fal
     for run in root.iterdir():
         if run.name in exclude_names or run.is_symlink() or not run.is_dir():
             continue
-        events = [event for event in _read_events(run) if isinstance(event, dict)]
-        if not events:
+        records = _read_events(run)
+        events = [event for event in records if isinstance(event, dict)]
+        unreadable = not records or any(not isinstance(event, dict) for event in records)
+        if not events and not (include_unreadable and unreadable):
             continue
         if run_id and not any(event.get("run_id") == run_id for event in events):
             continue
@@ -65,7 +67,7 @@ def newest_run(workspace, mode=None, run_id=None, destination=None, terminal=Fal
             continue
         if terminal and not any(event.get("event") in
                                 ("execution_completed", "execution_incomplete", "transfer_failed")
-                                for event in events):
+                                for event in events) and not (include_unreadable and unreadable):
             continue
         if no_receiver and any(event.get("event") == "transfer_attempt" for event in events):
             continue
@@ -272,7 +274,7 @@ def watch(args, ops):
             print("")
     try:
         if offline:
-            run = newest_run(workspace, terminal=True, no_receiver=True)
+            run = newest_run(workspace, no_receiver=True, include_unreadable=True)
             if run is None:
                 reason = "No finished run without a receiver was found. Ask the agent to run the skill once without a receiver."
         elif destination:

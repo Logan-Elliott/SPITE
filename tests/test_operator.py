@@ -385,6 +385,25 @@ class ThreeCommandResultsTests(unittest.TestCase):
             self.assertEqual(len(reports), 1)
             self.assertEqual(reports[0]["status"], "FAIL")
 
+    def test_watch_offline_does_not_verify_older_run_when_newest_events_are_unreadable(self):
+        for contents in ('null\n[]\n"record"\n3\n', '{"event":\n', '', None,
+                         '{"event":"execution_started","run_id":"newer"}\n'):
+            with self.subTest(contents=contents), tempfile.TemporaryDirectory() as temporary:
+                workspace, first, second = self.prepared_run(Path(temporary).resolve())
+                events_path = second / "events.jsonl"
+                if contents is None:
+                    events_path.unlink()
+                else:
+                    events_path.write_text(contents)
+                watch = op.module_from(op.ROOT / "tools/watch_flow.py", "unreadable_event_watch_test")
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(watch.watch(argparse.Namespace(workspace=str(workspace), offline=True),
+                                                SimpleNamespace(**vars(op))), 1)
+                self.assertIn("Run folder: " + str(second), output.getvalue())
+                self.assertNotIn("Run folder: " + str(first), output.getvalue())
+                self.assertIn("SPITE verification: FAIL", output.getvalue())
+
     def test_normal_watch_checks_prior_offline_run_and_transfer(self):
         for scenario in (None, "verified", "changed", "incomplete"):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
