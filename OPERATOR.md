@@ -10,12 +10,9 @@ verification work on Linux. Path lookup finds browser and agent files in Linux
 config directories, including XDG, snap, and Flatpak locations. Synthetic
 browser and agent paths use `~/.spite-exercise/`; real harvest records paths it
 cannot find.
-The Python checks run in Ubuntu CI, but a complete Linux agent and sensor
-exercise has not been validated.
 
-The packaged `spite` command and the steps below target macOS. The launcher
-requires `/bin/zsh`, `spite doctor` requires macOS, and PCAP capture and
-verification expect macOS `lo0` traffic in DLT_NULL format.
+The packaged `spite` command and the steps below target macOS. `spite doctor`
+and PCAP capture are macOS-specific.
 
 ## Run the standard test
 
