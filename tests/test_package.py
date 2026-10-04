@@ -86,7 +86,6 @@ class CombinedSetupTests(unittest.TestCase):
             "<chrome-profile>/Login Data",
             "<firefox-profile>/logins.json",
             "<trae-storage>/state.vscdb",
-            "<workspace>/config/secrets.json",
         ]})
 
     def test_file_list_with_several_groups_requires_a_group(self):

@@ -143,6 +143,39 @@ class OperatorTests(unittest.TestCase):
 
 
 class ThreeCommandSetupTests(unittest.TestCase):
+    def test_default_test_uses_discovered_locations_and_preserves_existing_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            home = root / "home"
+            home.mkdir()
+            chrome = home / ".config/google-chrome/Default"
+            chrome.mkdir(parents=True)
+            (chrome / "Login Data").write_bytes(b"existing chrome data")
+            firefox = home / ".mozilla/firefox/abc.default-release"
+            firefox.mkdir(parents=True)
+            trae = home / ".config/Trae/User/globalStorage"
+            trae.mkdir(parents=True)
+            workspace = root / "workspace"
+            argv = ["exercise_ops.py", "test", "--workspace", str(workspace), "--yes"]
+            with patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config")}), \
+                 patch.object(sys, "argv", argv), patch.object(op.os, "geteuid", return_value=501), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(op.main(), 0)
+            manifest = json.loads((workspace / "batches/representative.json").read_text())
+            paths = {entry["path"] for entry in manifest["files"]}
+            self.assertIn(str(firefox / "logins.json"), paths)
+            self.assertIn(str(trae / "state.vscdb"), paths)
+            self.assertNotIn(str(chrome / "Login Data"), paths)
+            self.assertEqual(len(paths), 6)
+            self.assertEqual((chrome / "Login Data").read_bytes(), b"existing chrome data")
+            self.assertFalse((workspace / "config/secrets.json").exists())
+            with patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config")}), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(op.cleanup(argparse.Namespace(workspace=str(workspace), apply=True)), 0)
+            self.assertFalse((firefox / "logins.json").exists())
+            self.assertFalse((trae / "state.vscdb").exists())
+            self.assertEqual((chrome / "Login Data").read_bytes(), b"existing chrome data")
+
     def test_default_test_prints_prompts_and_prepares_workspace_runs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

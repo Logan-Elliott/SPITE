@@ -4,11 +4,13 @@ A purple team tool for macOS and Linux that tests whether a coding agent
 discovers, trusts, and runs a malicious project skill.
 SPITE prepares the workspace; it does not start the agent or run the skill.
 
-Setup can either create synthetic fake credential files or select existing real
-files, and the bundle can be sent to a receiver. By default the receiver is on
-`127.0.0.1`. You can also give setup a destination URL (`http`, `https`, `ws`,
-or `wss`) and the same bundle is sent there. Synthetic mode never reads existing
-files; real mode reads only the exact paths in the file list.
+The normal test creates fake credential files at the selected locations. When
+the agent runs the skill, it reads the files setup created. With
+`--harvest real`, setup selects existing files at those locations for the skill
+to read instead. By default, the bundle is sent to a receiver on `127.0.0.1`.
+You can also provide a destination URL (`http`, `https`, `ws`, or `wss`). Normal
+setup does not read existing target file contents. Real mode reads only the exact
+paths in the file list.
 
 > Run it only on systems and accounts included in an authorized assessment.
 
@@ -26,10 +28,10 @@ below. On Linux, use the standard test without `--pcap`; setup details are in
    spite test --workspace "$HOME/spite-exercise"
    ```
 
-   The default uses Trae and synthetic fake files. Setup lists every requested
-   path outside the workspace, asks once before writing, and refuses `sudo` or
-   an existing workspace. Open it in the agent. Keep its normal approval
-   controls enabled.
+   The default uses Trae and fake credential files. Setup shows each path
+   outside the workspace where it may create a file, asks once before writing,
+   and refuses `sudo` or an existing workspace. Open it in the agent. Keep its
+   normal approval controls enabled.
    Setup prints the prompts for this workspace. To see them again later, run
    `spite prompts "$HOME/spite-exercise"`.
    Paste prompt 1, **Let the agent pick the skill**, into a fresh conversation.
@@ -169,8 +171,9 @@ The included [Trae config](profiles/trae.json) installs the skill under Trae's
 project skill path. Confirm that path against the product version used in the
 engagement.
 
-The standard test uses eight representative synthetic files. To use one group
-from the expanded file list:
+The standard test names seven credential-shaped file paths. Setup creates fake
+files at available paths when no file is already there. The skill reads the
+files setup created. To use one group from the expanded file list:
 
 ```sh
 spite test --file-list plans/macos-expanded.json --group developer
@@ -183,9 +186,11 @@ Browser and agent paths use placeholders that setup resolves on this machine:
 `<trae-storage>`, `<openclaw-config>`, and `<openclaw-home>`. The native macOS
 location, `$XDG_CONFIG_HOME` (or `~/.config`), and the snap and flatpak roots
 are checked for Chrome, Chromium, Brave, Edge, and Firefox. Trae uses its macOS
-or Linux config storage. Synthetic setup maps every placeholder to an isolated
-directory under `~/.spite-exercise/`; real harvest uses the discovered directory
-and reports entries it cannot resolve.
+or Linux config storage. Setup uses the product directories it finds on this
+machine. If a product directory is missing, setup skips its path. In the normal
+test, it also skips any file already at a requested path without reading or
+changing it. With `--harvest real`, it reads existing files at the requested
+paths and skips missing files.
 
 ## Harvest real files
 
