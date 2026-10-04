@@ -221,19 +221,19 @@ def _case_note(case, report, outcome):
     if case == "TC-01":
         return "Check the agent transcript for skill selection."
     if case == "TC-02":
-        return "Check the agent tool trace and process ancestry."
+        return "Check the agent tool trace; ask the defensive team about process ancestry."
     if outcome == "not-run":
         return "No transfer was requested." if case == "TC-05" else "No run was recorded."
     if observed == "artifacts-verified":
         return {
-            "TC-03": "Run records show matching reads; check EDR file events.",
-            "TC-04": "The staged bundle matches; check EDR file writes.",
-            "TC-05": "The receiver acknowledgement matches; check receiver and EDR/SIEM alerts.",
+            "TC-03": "Run records show matching reads; ask the defensive team about file events.",
+            "TC-04": "The staged bundle matches; ask the defensive team about file writes.",
+            "TC-05": "The receiver acknowledgement matches; ask the defensive team about EDR/SIEM alerts.",
         }[case]
     return {
-        "TC-03": "Check runner records and EDR file events.",
-        "TC-04": "Check the run folder and EDR file writes.",
-        "TC-05": "Check the receiver and EDR/SIEM alerts.",
+        "TC-03": "Check runner records; ask the defensive team about file events.",
+        "TC-04": "Check the run folder; ask the defensive team about file writes.",
+        "TC-05": "Check the receiver; ask the defensive team about EDR/SIEM alerts.",
     }[case]
 
 
@@ -244,7 +244,7 @@ def _print_results(report, outcomes):
     for case, name in CASE_NAMES.items():
         print("{:<6} {:<23} {}: {}".format(case, outcomes[case], name,
                                          _case_note(case, report, outcomes[case])))
-    print("Sensor outcome: unknown — check EDR and SIEM events and alerts.")
+    print("Sensor outcome: unknown — ask the defensive team about EDR/SIEM alerts.")
     if not report:
         return
     for key, passed in report.get("checks", {}).items():

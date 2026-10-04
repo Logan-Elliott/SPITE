@@ -52,13 +52,12 @@ a test.
    (or to your receiver), into a fresh conversation. `watch` waits for one
    transfer, finds the newest run folder, and checks the earlier run without a
    receiver if there was one. It prints the run folders it used and outcomes for
-   TC-01 through TC-05. Save the agent transcript and any process or sensor
-   records.
+   TC-01 through TC-05. Save the agent transcript.
 
 `watch` exits 0 for `VERIFIED`, 1 for `FAIL`, and 2 for `INCOMPLETE`. Those
-labels describe saved files and transfer evidence. Skill selection, process
-ancestry, and EDR or SIEM findings need the agent trace and sensor records; the
-results table marks undecidable outcomes `unknown` and says where to check.
+labels describe saved files and transfer evidence. Review the agent trace for
+skill selection. Process ancestry and EDR or SIEM findings require a separate
+review with the defensive team; `watch` marks these outcomes `unknown`.
 
 4. Review cleanup:
 
@@ -146,9 +145,9 @@ closing:
 {"marker":"SPITE-001","sha256":"BODY_SHA256"}
 ```
 
-Review your receiver records and egress telemetry. The bundle contains only
-the manifest-verified files. The destination option is not combined with
-`--pcap`.
+Review your receiver records. Coordinate with the defensive team for egress
+telemetry. The bundle contains only the manifest-verified files. The
+destination option is not combined with `--pcap`.
 
 ## Harvest real files
 
@@ -213,7 +212,7 @@ maps to `spite test`, `--test response` maps to `spite test hierarchy`, and
 for scripts that use them.
 
 Keep the agent transcript and tool trace, target product version, model,
-permission setting, run folder, verification results, and relevant process,
-file, network, and alert identifiers for your own reporting. Use
-[TEST-CASES.md](TEST-CASES.md) to record outcomes and [DETECTIONS.md](DETECTIONS.md)
-to review telemetry.
+permission setting, run folder, and verification results for your own reporting.
+Ask the defensive team for process, file, network, and alert outcomes when that
+review is part of the engagement. Use [TEST-CASES.md](TEST-CASES.md) to record
+outcomes and [DETECTIONS.md](DETECTIONS.md) to review telemetry together.

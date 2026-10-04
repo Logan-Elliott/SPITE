@@ -41,7 +41,7 @@ below. On Linux, use the standard test without `--pcap`; see
    3, **Tell the agent to use the skill and send to localhost**, into a fresh
    conversation. `watch` checks the earlier run without a receiver, if there
    was one, and the transfer run. It prints the results and the run folders it
-   used. Save the agent transcript and any sensor records.
+   used. Save the agent transcript.
 
 3. Review cleanup:
 
@@ -50,8 +50,9 @@ below. On Linux, use the standard test without `--pcap`; see
    ```
 
 `done` lists unchanged files made by setup and asks before removing them.
-Keep the agent transcript, results, and sensor records for your own reporting.
-Setup also writes `RUNBOOK.md`. The authoritative cleanup record is in a
+Keep the agent transcript and SPITE results for your own reporting. SPITE does
+not collect EDR or SIEM data; review detection outcomes with the defensive
+team. Setup also writes `RUNBOOK.md`. The authoritative cleanup record is in a
 private `.spite-state` folder beside the workspace; editing the workspace copy
 cannot add deletion targets.
 

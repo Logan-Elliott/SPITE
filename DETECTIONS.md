@@ -1,6 +1,7 @@
 # Detection and scoring
 
-Use the detection ideas that match the telemetry collected during the engagement.
+The defensive team can use these ideas with the telemetry they collect during
+the engagement.
 
 | Case | Detection idea | Evidence |
 |---|---|---|
@@ -24,8 +25,8 @@ skill body loaded
 Use process GUIDs or start times rather than PID alone. The `SPITE-*` markers help
 identify this run, but detections should also match the behavior.
 
-Record at least the following. Add sensor event IDs and analyst notes when they
-are available.
+For a joint review, use these fields. Include sensor event IDs and analyst
+notes when the defensive team provides them.
 
 ```text
 test_case_id, outcome, run_id, endpoint, agent_version, model,
