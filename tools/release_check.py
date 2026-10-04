@@ -56,12 +56,15 @@ def main():
     builder=[sys.executable, str(ROOT / "tools/build_package.py")]
     run(builder)
     version=(ROOT/"VERSION").read_text(encoding="utf-8").strip()
-    archive=ROOT/"dist"/("spite-{}-macos.zip".format(version))
+    archive=ROOT/"dist"/("spite-{}.zip".format(version))
     first=hashlib.sha256(archive.read_bytes()).hexdigest()
     run(builder)
     second=hashlib.sha256(archive.read_bytes()).hexdigest()
     if first!=second:
         raise RuntimeError("Package build is not reproducible")
+    checksum=archive.with_name(archive.name+".sha256")
+    if checksum.read_text(encoding="utf-8")!=second+"  "+archive.name+"\n":
+        raise RuntimeError("Package checksum does not match the archive")
     print("Reproducible package SHA-256:",second)
     print("Release checks passed.")
     return 0

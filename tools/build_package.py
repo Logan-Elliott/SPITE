@@ -13,7 +13,7 @@ if __name__=="__main__":
     version=(ROOT/"VERSION").read_text(encoding="utf-8").strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+",version):
         raise ValueError("VERSION must use semantic version format X.Y.Z")
-    package_root="{}-{}-macos".format(SLUG,version)
+    package_root="{}-{}".format(SLUG,version)
     output=ROOT/"dist"
     output.mkdir(exist_ok=True)
     target=output/(package_root+".zip")

@@ -25,12 +25,12 @@ jobs:
       - name: Attest operator archive
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: dist/spite-*-macos.zip
+          subject-path: dist/spite-*.zip
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
-          dist/spite-*-macos.zip
-          dist/spite-*-macos.zip.sha256
+          dist/spite-*.zip
+          dist/spite-*.zip.sha256
           --verify-tag --generate-notes

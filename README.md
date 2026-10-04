@@ -265,13 +265,25 @@ bundle. Run real harvest only inside an authorized engagement.
 - [TEST-CASES.md](TEST-CASES.md): MITRE mappings and evidence
 - [DETECTIONS.md](DETECTIONS.md): detection ideas for the defensive team
 
-Tagged releases include a GitHub artifact attestation. After downloading a ZIP,
-verify both records:
+Tagged releases include a GitHub artifact attestation. Download the ZIP and
+its `.sha256` file into the same folder, then check the SHA-256 checksum.
+
+On macOS:
 
 ```sh
-sha256sum -c spite-0.2.0-macos.zip.sha256
-gh attestation verify spite-0.2.0-macos.zip \
-  --repo Logan-Elliott/spite
+shasum -a 256 -c spite-0.2.0.zip.sha256
+```
+
+On Linux:
+
+```sh
+sha256sum -c spite-0.2.0.zip.sha256
+```
+
+Then verify the GitHub attestation:
+
+```sh
+gh attestation verify spite-0.2.0.zip --repo Logan-Elliott/SPITE
 ```
 
 Released under the [MIT License](LICENSE).
