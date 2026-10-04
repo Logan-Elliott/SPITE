@@ -54,7 +54,7 @@ def _read_events(run):
 
 
 def newest_run(workspace, mode=None, run_id=None, destination=None, terminal=False,
-               exclude_names=()):
+               no_receiver=False, exclude_names=()):
     """Find the newest run recorded under this workspace."""
     root = Path(workspace) / "runs"
     if not root.is_dir() or root.is_symlink():
@@ -77,6 +77,8 @@ def newest_run(workspace, mode=None, run_id=None, destination=None, terminal=Fal
         if terminal and not any(event.get("event") in
                                 ("execution_completed", "execution_incomplete", "transfer_failed")
                                 for event in events):
+            continue
+        if no_receiver and any(event.get("event") == "transfer_attempt" for event in events):
             continue
         try:
             candidates.append((run.stat().st_mtime_ns, run.name, run))
@@ -273,6 +275,53 @@ def _record_results(workspace, result):
             os.close(descriptor)
 
 
+def _verify_and_record(workspace, saved, ops, run, offline, receipt=None, pcap=None,
+                       destination=None, reason=None):
+    report = None
+    output = None
+    if run is not None:
+        print("Run folder: " + str(run))
+        if (run / "events.jsonl").is_symlink() or (run / "diagnostics.b64").is_symlink():
+            reason = "The run contains a linked evidence file; expected regular files inside the run folder."
+        else:
+            output = _report_path(saved, offline)
+            verify_args = argparse.Namespace(
+                run=str(run), manifest=saved["manifest"],
+                receipt=str(receipt) if receipt else None,
+                pcap=str(pcap) if pcap else None,
+                output=str(output), evidence_profile=saved["mode"],
+                destination=None if offline else destination,
+                offline=offline, json_output=True, workspace=None,
+            )
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    ops.verify(verify_args)
+                report = json.loads(output.read_text(encoding="utf-8"))
+            except (OSError, ValueError, RuntimeError) as exc:
+                reason = "Verification could not complete: " + str(exc)
+    if reason:
+        print(reason)
+    outcomes = score_test_cases(report, offline)
+    _print_results(report, outcomes)
+    if report is not None:
+        print("Verification report: " + str(output))
+    events = _read_events(run) if run else []
+    result = {
+        "timestamp": ops.utc(),
+        "run_id": (report.get("run_id") if report else None) or
+                  (events[0].get("run_id") if events else None),
+        "run_folder": str(run) if run else None,
+        "status": report.get("status", "INCOMPLETE") if report else "INCOMPLETE",
+        "verification_report": str(output) if report else None,
+        "test_cases": outcomes,
+        "offline": offline,
+        "started_utc": report.get("start_utc") if report else None,
+        "verified_utc": report.get("verified_utc") if report else None,
+    }
+    _record_results(workspace, result)
+    return result["status"]
+
+
 def watch(args, ops):
     workspace = Path(args.workspace).expanduser().resolve(strict=True)
     setup = json.loads((workspace / "setup-result.json").read_text(encoding="utf-8"))
@@ -298,8 +347,14 @@ def watch(args, ops):
     receiver = None
     capture = None
     run = None
-    report = None
     reason = None
+    earlier_status = None
+    if not offline:
+        earlier_run = newest_run(workspace, terminal=True, no_receiver=True)
+        if earlier_run is not None:
+            print("Earlier run without a receiver:")
+            earlier_status = _verify_and_record(workspace, saved, ops, earlier_run, True)
+            print("")
     try:
         if offline:
             run = newest_run(workspace, mode="offline")
@@ -344,44 +399,15 @@ def watch(args, ops):
         _stop_receiver(receiver)
         _stop_capture(capture)
 
-    if run is not None:
-        print("Run folder: " + str(run))
-        if (run / "events.jsonl").is_symlink() or (run / "diagnostics.b64").is_symlink():
-            reason = "The run contains a linked evidence file; expected regular files inside the run folder."
-        else:
-            output = _report_path(saved, offline)
-            verify_args = argparse.Namespace(
-                run=str(run), manifest=saved["manifest"],
-                receipt=str(receipt) if receipt else None,
-                pcap=str(pcap) if pcap else None,
-                output=str(output), evidence_profile=saved["mode"],
-                destination=None if offline else destination,
-                offline=offline, json_output=True, workspace=None,
-            )
-            try:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    ops.verify(verify_args)
-                report = json.loads(output.read_text(encoding="utf-8"))
-            except (OSError, ValueError, RuntimeError) as exc:
-                reason = "Verification could not complete: " + str(exc)
-    if reason:
-        print(reason)
-    outcomes = score_test_cases(report, offline)
-    _print_results(report, outcomes)
-    if report is not None:
-        print("Verification report: " + str(output))
-    result = {
-        "timestamp": ops.utc(),
-        "run_id": (report.get("run_id") if report else None) or
-                  (_read_events(run)[0].get("run_id") if run and _read_events(run) else None),
-        "run_folder": str(run) if run else None,
-        "status": report.get("status", "INCOMPLETE") if report else "INCOMPLETE",
-        "verification_report": str(output) if report else None,
-        "test_cases": outcomes,
-        "offline": offline,
-        "started_utc": report.get("start_utc") if report else None,
-        "verified_utc": report.get("verified_utc") if report else None,
-    }
-    _record_results(workspace, result)
+    if earlier_status is not None:
+        print("Transfer run:")
+    status = _verify_and_record(workspace, saved, ops, run, offline, receipt, pcap,
+                                destination, reason)
+    if earlier_status == "FAIL" or status == "FAIL":
+        status = "FAIL"
+    elif earlier_status == "INCOMPLETE" or status == "INCOMPLETE":
+        status = "INCOMPLETE"
+    if earlier_status is not None:
+        print("Overall result: " + status)
     print("Next: " + shlex.join(["spite", "done", str(workspace)]))
-    return {"VERIFIED": 0, "FAIL": 1, "INCOMPLETE": 2}[result["status"]]
+    return {"VERIFIED": 0, "FAIL": 1, "INCOMPLETE": 2}[status]

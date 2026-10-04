@@ -160,10 +160,19 @@ class ThreeCommandSetupTests(unittest.TestCase):
             self.assertIn("Tell the agent to use the skill", output.getvalue())
             self.assertIn("```text", output.getvalue())
             self.assertIn("Next command: spite watch " + str(workspace), output.getvalue())
+            self.assertIn("Step 1 — Let the agent pick the skill", output.getvalue())
+            self.assertIn("Step 2 — Tell the agent to use the skill (only if step 1 did not use the skill)", output.getvalue())
+            self.assertIn("Wait for Receiver READY before submitting step 3", output.getvalue())
+            self.assertLess(output.getvalue().index("Step 1 —"), output.getvalue().index("Step 2 —"))
+            self.assertLess(output.getvalue().index("Next command: spite watch "),
+                            output.getvalue().index("Step 3 —"))
             runbook = (workspace / "RUNBOOK.md").read_text()
             self.assertNotIn("RUN_FOLDER", runbook)
             self.assertIn("spite watch " + str(workspace), runbook)
             self.assertIn("spite done " + str(workspace), runbook)
+            self.assertNotIn("spite watch --offline", runbook)
+            self.assertIn("### Step 2 — Tell the agent to use the skill (only if step 1 did not use the skill)", runbook)
+            self.assertLess(runbook.index("spite watch " + str(workspace)), runbook.index("### Step 3 —"))
             runner = op.module_from(op.SKILL / "scripts/preflight.py", "workspace_runner")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(runner.run(workspace / "batches/sample.json"), 0)
@@ -235,6 +244,84 @@ class ThreeCommandResultsTests(unittest.TestCase):
             self.assertEqual(result["status"], "VERIFIED")
             self.assertEqual(result["test_cases"]["TC-03"], "unknown")
             self.assertEqual(result["test_cases"]["TC-05"], "not-run")
+
+    def test_normal_watch_checks_prior_offline_run_and_transfer(self):
+        for scenario in (None, "verified", "changed", "incomplete"):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                if scenario is None:
+                    workspace = root / "workspace"
+                    plan = root / "plan.json"
+                    plan.write_text(json.dumps({"sample": ["<workspace>/fake.env"]}))
+                    with patch.object(op.os, "geteuid", return_value=501), contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(op.setup(argparse.Namespace(plan=str(plan), workspace=str(workspace), yes=True)), 0)
+                    offline_run = None
+                else:
+                    workspace, _, offline_run = self.prepared_run(root)
+                if scenario == "changed":
+                    (offline_run / "diagnostics.b64").write_bytes(b"changed")
+                elif scenario == "incomplete":
+                    events_path = offline_run / "events.jsonl"
+                    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+                    events[-1]["event"] = "execution_incomplete"
+                    events[-1].pop("mode")
+                    events_path.write_text("\n".join(json.dumps(event) for event in events) + "\n")
+                    (offline_run / "diagnostics.b64").unlink()
+                watch = op.module_from(op.ROOT / "tools/watch_flow.py", "normal_watch_test")
+                runner = op.module_from(op.SKILL / "scripts/preflight.py", "normal_watch_runner")
+                manifest = workspace / "batches/sample.json"
+
+                class Receiver:
+                    stdout = None
+
+                    def __init__(self, receipt):
+                        self.receipt = Path(receipt)
+                        self.completed = False
+
+                    def wait(self, timeout=None):
+                        previous = set((workspace / "runs").iterdir())
+                        with patch.object(runner.http.client, "HTTPConnection") as connection, \
+                             contextlib.redirect_stdout(io.StringIO()):
+                            connection.return_value.getresponse.return_value.status = 204
+                            connection.return_value.getresponse.return_value.getheader.side_effect = (
+                                lambda _name: op.hashlib.sha256(
+                                    connection.return_value.request.call_args.kwargs["body"]).hexdigest())
+                            self.assert_run(runner, manifest)
+                        transfer_run = next(iter(set((workspace / "runs").iterdir()) - previous))
+                        payload = json.loads(base64.b64decode((transfer_run / "diagnostics.b64").read_bytes()))
+                        self.receipt.write_text(json.dumps(dict(event="collector_received", **payload)) + "\n")
+                        self.completed = True
+                        return 0
+
+                    def assert_run(self, runner, manifest):
+                        if runner.run(manifest, True) != 0:
+                            raise AssertionError("Transfer run failed")
+
+                    def poll(self):
+                        return 0 if self.completed else None
+
+                    def terminate(self):
+                        self.completed = True
+
+                def start(command, label, timeout):
+                    self.assertEqual(label, "Receiver")
+                    return Receiver(command[command.index("--output") + 1])
+
+                output = io.StringIO()
+                with patch.object(watch, "_start", side_effect=start), contextlib.redirect_stdout(output):
+                    status = watch.watch(argparse.Namespace(workspace=str(workspace), offline=False, timeout=1),
+                                         SimpleNamespace(**vars(op)))
+                self.assertEqual(status, 1 if scenario in ("changed", "incomplete") else 0)
+                results = [json.loads(line) for line in (workspace / "watch-results.jsonl").read_text().splitlines()]
+                self.assertEqual(len(results), 1 if scenario is None else 2)
+                if offline_run is not None:
+                    self.assertEqual(results[0]["run_folder"], str(offline_run))
+                    self.assertTrue(results[0]["offline"])
+                    self.assertEqual(results[0]["status"], "FAIL" if scenario in ("changed", "incomplete") else "VERIFIED")
+                    self.assertIn(str(offline_run), output.getvalue())
+                self.assertFalse(results[-1]["offline"])
+                self.assertEqual(results[-1]["status"], "VERIFIED")
+                self.assertIn("Next: spite done " + str(workspace), output.getvalue())
 
     def test_watch_translates_failed_checks_without_internal_keys(self):
         watch = op.module_from(op.ROOT / "tools/watch_flow.py", "watch_scoring_test")

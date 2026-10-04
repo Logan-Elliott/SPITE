@@ -17,28 +17,36 @@ Requirements: macOS, Python 3.9+, a disposable project or test account, and an
 agent that supports project-local `SKILL.md` packages. Install the command with
 `./spite install`, or use `./spite` in place of `spite` below.
 
-Prepare the standard test:
+1. Prepare the standard test:
 
-```sh
-spite test --workspace "$HOME/spite-exercise"
-```
+   ```sh
+   spite test --workspace "$HOME/spite-exercise"
+   ```
 
-Setup asks once before writing files. It prints the exact prompts to paste into
-the agent, one per fresh conversation, in order. Open the new workspace in the
-agent. Start the watch command before submitting the prompt that sends the
-bundle:
+   Setup asks once before writing files and prints the agent prompts. Open the
+   new workspace in the agent. Paste prompt 1, **Let the agent pick the skill**,
+   into a fresh conversation. Paste prompt 2, **Tell the agent to use the
+   skill**, into another fresh conversation only if the agent did not choose
+   the skill in prompt 1.
 
-```sh
-spite watch "$HOME/spite-exercise"
-```
+2. Start the receiver before prompt 3:
 
-Wait for `READY`, submit the transfer prompt, and let `watch` show the results.
-Save the agent transcript and any sensor records. Then fill in the product,
-model, permission, and sensor details and review cleanup:
+   ```sh
+   spite watch "$HOME/spite-exercise"
+   ```
 
-```sh
-spite done "$HOME/spite-exercise"
-```
+   Wait for `Receiver READY` (and `PCAP READY` if requested). Then paste prompt
+   3, **Tell the agent to use the skill and send to localhost**, into a fresh
+   conversation. `watch` checks the earlier run without a receiver, if there
+   was one, and the transfer run. It prints the results and the run folders it
+   used. Save the agent transcript and any sensor records.
+
+3. Fill in the product, model, permission, and sensor details and review
+   cleanup:
+
+   ```sh
+   spite done "$HOME/spite-exercise"
+   ```
 
 `done` writes the final `ENGAGEMENT-REPORT.json`, lists unchanged files made by
 setup, and asks before removing them. Setup also writes `RUNBOOK.md`. The
