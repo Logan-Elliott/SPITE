@@ -4,6 +4,9 @@ All notable changes to this project are documented here.
 
 ## Unreleased
 
+- Removed the test-case table and sensor line from `spite watch`, and removed
+  defensive review fields from verification JSON. SPITE now reports its own
+  checks only.
 - Added `spite test`, `spite watch`, and `spite done` as the main engagement
   flow. Setup prints prompts, watch starts the receiver and optional PCAP
   capture and finds the run folder, and done reviews guarded cleanup. The

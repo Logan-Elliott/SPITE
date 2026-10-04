@@ -51,13 +51,13 @@ a test.
    Then paste prompt 3, **Tell the agent to use the skill and send to localhost**
    (or to your receiver), into a fresh conversation. `watch` waits for one
    transfer, finds the newest run folder, and checks the earlier run without a
-   receiver if there was one. It prints the run folders it used and outcomes for
-   TC-01 through TC-05. Save the agent transcript.
+   receiver if there was one. It prints the run folders it used and the
+   verification status. Save the agent transcript.
 
 `watch` exits 0 for `VERIFIED`, 1 for `FAIL`, and 2 for `INCOMPLETE`. Those
-labels describe saved files and transfer evidence. Review the agent trace for
-skill selection. Process ancestry and EDR or SIEM findings require a separate
-review with the defensive team; `watch` marks these outcomes `unknown`.
+labels describe SPITE's saved files and transfer. SPITE does not score test
+cases or detection status. Review the agent trace for skill selection, and ask
+the defensive team about alerts when that review is part of the engagement.
 
 4. Review cleanup:
 
@@ -212,7 +212,8 @@ maps to `spite test`, `--test response` maps to `spite test hierarchy`, and
 for scripts that use them.
 
 Keep the agent transcript and tool trace, target product version, model,
-permission setting, run folder, and verification results for your own reporting.
-Ask the defensive team for process, file, network, and alert outcomes when that
-review is part of the engagement. Use [TEST-CASES.md](TEST-CASES.md) to record
-outcomes and [DETECTIONS.md](DETECTIONS.md) to review telemetry together.
+permission setting, run folder, and SPITE verification output for your own
+reporting. Ask the defensive team for process, file, network, and alert outcomes
+when that review is part of the engagement. Use [TEST-CASES.md](TEST-CASES.md)
+to record outcomes and [DETECTIONS.md](DETECTIONS.md) to review telemetry
+together.

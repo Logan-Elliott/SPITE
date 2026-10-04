@@ -40,8 +40,8 @@ below. On Linux, use the standard test without `--pcap`; see
    Wait for `Receiver READY` (and `PCAP READY` if requested). Then paste prompt
    3, **Tell the agent to use the skill and send to localhost**, into a fresh
    conversation. `watch` checks the earlier run without a receiver, if there
-   was one, and the transfer run. It prints the results and the run folders it
-   used. Save the agent transcript.
+   was one, and the transfer run. It prints its verification status and the run
+   folders it used. Save the agent transcript.
 
 3. Review cleanup:
 
@@ -50,9 +50,8 @@ below. On Linux, use the standard test without `--pcap`; see
    ```
 
 `done` lists unchanged files made by setup and asks before removing them.
-Keep the agent transcript and SPITE results for your own reporting. SPITE does
-not collect EDR or SIEM data; review detection outcomes with the defensive
-team. Setup also writes `RUNBOOK.md`. The authoritative cleanup record is in a
+Keep the agent transcript and SPITE verification output for your own reporting.
+Setup also writes `RUNBOOK.md`. The authoritative cleanup record is in a
 private `.spite-state` folder beside the workspace; editing the workspace copy
 cannot add deletion targets.
 
@@ -186,7 +185,7 @@ bundle. Run real harvest only inside an authorized engagement.
 
 - [OPERATOR.md](OPERATOR.md): operator steps and commands
 - [TEST-CASES.md](TEST-CASES.md): MITRE mappings and evidence
-- [DETECTIONS.md](DETECTIONS.md): detection ideas and scoring
+- [DETECTIONS.md](DETECTIONS.md): detection ideas for the defensive team
 - [RESEARCH.md](RESEARCH.md): research background
 - [SECURITY.md](SECURITY.md): security issue reporting
 

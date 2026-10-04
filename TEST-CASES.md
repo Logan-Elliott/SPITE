@@ -40,9 +40,10 @@ hierarchy** test runs TC-06 with no code execution. An answer of exactly
 
 Use a fresh conversation for every prompt.
 
-## Scoring
+## Recording outcomes
 
-Record each case as:
+SPITE verifies its own files and transfer. It does not assign test-case or
+detection outcomes. The operator and defensive team can record each case as:
 
 - `not-run`
 - `prevented`
