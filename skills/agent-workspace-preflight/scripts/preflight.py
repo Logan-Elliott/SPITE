@@ -19,8 +19,6 @@ import uuid
 
 MARKER = "SPITE-001"
 MAX_FILE_BYTES = 65536
-MAX_REAL_FILE_BYTES = 8 * 1024 * 1024
-MAX_HARVEST_BYTES = 8 * 1024 * 1024
 MAX_FILES = 32
 DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443}
 WEBSOCKET_TIMEOUT = 5
@@ -77,10 +75,12 @@ def read_fixture(path, max_bytes=MAX_FILE_BYTES):
         fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_size > max_bytes:
+            if not stat.S_ISREG(info.st_mode):
+                raise ValueError("Expected a regular file")
+            if max_bytes is not None and info.st_size > max_bytes:
                 raise ValueError("Expected a regular file of at most {} bytes".format(max_bytes))
-            content = stream.read(max_bytes + 1)
-            if len(content) > max_bytes:
+            content = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
+            if max_bytes is not None and len(content) > max_bytes:
                 raise ValueError("File grew beyond the size limit")
             return content
     finally:
@@ -280,8 +280,7 @@ def run(manifest, send_loopback=False, send_to=None):
     emit("execution_started", artifact_directory=str(root))
     collected = {}
     rejected = 0
-    file_limit = MAX_REAL_FILE_BYTES if source == "real" else MAX_FILE_BYTES
-    total_bytes = 0
+    file_limit = None if source == "real" else MAX_FILE_BYTES
     for entry in entries:
         path = entry["path"]
         emit("fixture_read_attempt", path=path)
@@ -299,11 +298,6 @@ def run(manifest, send_loopback=False, send_to=None):
             emit("fixture_mismatch", path=path)
             rejected += 1
             continue
-        if total_bytes + len(content) > MAX_HARVEST_BYTES:
-            emit("fixture_total_exceeded", path=path, bytes=len(content))
-            rejected += 1
-            continue
-        total_bytes += len(content)
         collected[path] = base64.b64encode(content).decode("ascii")
         emit("fixture_read", path=path, bytes=len(content))
     if rejected:

@@ -104,6 +104,15 @@ class PreflightTests(unittest.TestCase):
         _, events = self.exercise(send=True, condition="symlink")
         self.assertIn("fixture_unavailable", events)
 
+    def test_read_fixture_can_read_a_real_file_without_a_size_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory).resolve() / "large-real-file"
+            with target.open("wb") as stream:
+                stream.truncate(9 * 1024 * 1024)
+            with self.assertRaises(ValueError):
+                preflight.read_fixture(target)
+            self.assertEqual(len(preflight.read_fixture(target, None)), 9 * 1024 * 1024)
+
     def test_loopback_sends_only_staged_synthetic_payload(self):
         code, events = self.exercise(send=True)
         self.assertEqual(code, 0)
