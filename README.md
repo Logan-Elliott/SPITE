@@ -207,20 +207,27 @@ The JSON maps group names to lists of exact paths, for example:
 
 ```json
 {
-  "example": ["<workspace>/test.env"]
+  "developer": [
+    "/Users/alex/.ssh/id_rsa",
+    "/Users/alex/.git-credentials"
+  ],
+  "cloud": [
+    "/Users/alex/.aws/credentials"
+  ]
 }
 ```
 
-The runner accepts at most 32 files in one manifest and rejects globs, traversal,
-and special files. Synthetic mode also rejects symlinks, changed file hashes,
-and files larger than 64 KiB.
+Use paths that exist on the test machine, with its actual user name. The runner
+accepts at most 32 files in one manifest and rejects globs, traversal, and
+special files. Synthetic mode also rejects symlinks and changed file hashes.
 
 Real mode checks path information during setup and selects existing regular
 files. A listed symlink is selected when its target is a regular file. Setup
 skips missing paths, special files, and paths it cannot check without opening
 their contents. When the agent runs the skill, the runner opens each selected
 path and collects its current contents with no configured per-file or total size
-limit. If a selected path is then missing or cannot be read, the run is
+limit. Synthetic collection has no configured per-file or total size limit
+either. If a selected path is then missing or cannot be read, the run is
 incomplete and no bundle is staged.
 
 ### Use another agent
