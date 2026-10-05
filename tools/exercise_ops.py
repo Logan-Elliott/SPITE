@@ -179,12 +179,12 @@ def unlink_owned_file(entry):
         fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(stream.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
+            if not stat.S_ISREG(info.st_mode):
                 raise ValueError("Expected an unchanged regular file")
-            content = stream.read(65537)
+            content = stream.read()
         if (info.st_dev, info.st_ino) != (entry["device"], entry["inode"]):
             raise ValueError("File identity changed")
-        if len(content) > 65536 or hashlib.sha256(content).hexdigest() != entry["sha256"]:
+        if hashlib.sha256(content).hexdigest() != entry["sha256"]:
             raise ValueError("Contents changed")
         current = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
         if (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):

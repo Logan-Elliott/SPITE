@@ -138,6 +138,25 @@ class OperatorTests(unittest.TestCase):
             self.assertIn(str(workspace/".env"),output.getvalue())
             self.assertNotIn(str(protected),output.getvalue())
 
+    def test_cleanup_removes_unchanged_large_seed_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            target = root / "large-seed"
+            content = b"synthetic credential data\n" * 5000
+            target.write_bytes(content)
+            info = target.stat()
+            entry = dict(
+                path=str(target),
+                sha256=op.hashlib.sha256(content).hexdigest(),
+                kind="seed",
+                device=info.st_dev,
+                inode=info.st_ino,
+            )
+
+            op.unlink_owned_file(entry)
+
+            self.assertFalse(target.exists())
+
     def test_failed_setup_keeps_a_working_cleanup_record(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary).resolve();workspace=root/"workspace"
