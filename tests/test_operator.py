@@ -33,6 +33,40 @@ def pcap(segments):
 
 
 class OperatorTests(unittest.TestCase):
+    def test_setup_writes_but_does_not_reread_synthetic_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            workspace = root / "workspace"
+            target = root / "credential-never-read-before-prompt-unique"
+            plan = root / "plan.json"
+            plan.write_text(json.dumps({"sample": [str(target)]}))
+            real_open = os.open
+            real_io_open = io.open
+
+            def reject_credential_read(path, flags, *args, **kwargs):
+                if os.fspath(path) == target.name and kwargs.get("dir_fd") is not None:
+                    if not flags & (os.O_WRONLY | os.O_RDWR):
+                        raise AssertionError("synthetic credential was reopened during setup")
+                return real_open(path, flags, *args, **kwargs)
+
+            def reject_credential_io_open(path, *args, **kwargs):
+                if os.fspath(path) == str(target):
+                    raise AssertionError("synthetic credential was reopened during setup")
+                return real_io_open(path, *args, **kwargs)
+
+            with patch.object(op.os, "geteuid", return_value=501), \
+                 patch.object(op.os, "open", side_effect=reject_credential_read), \
+                 patch.object(io, "open", side_effect=reject_credential_io_open), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(op.setup(argparse.Namespace(
+                    plan=str(plan), workspace=str(workspace), apply=True)), 0)
+            manifest = json.loads((workspace / "batches/credentials.json").read_text())
+            self.assertEqual(manifest["files"][0]["path"], str(target))
+            self.assertEqual(
+                manifest["files"][0]["sha256"],
+                op.hashlib.sha256(op.prepare.__globals__["MOCK_DATA"]).hexdigest(),
+            )
+
     def test_setup_and_cleanup_are_independent_and_preserve_changed_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary).resolve(); workspace=root/"workspace"

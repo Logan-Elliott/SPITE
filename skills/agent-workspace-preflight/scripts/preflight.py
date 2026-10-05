@@ -42,20 +42,27 @@ def manifest_source(data):
 def validate_manifest(data):
     if data.get("exercise") != MARKER:
         raise ValueError("Manifest must identify this exercise")
-    manifest_source(data)
+    source = manifest_source(data)
     entries = data.get("files")
     if not isinstance(entries, list) or not 1 <= len(entries) <= MAX_FILES:
         raise ValueError("Manifest requires 1 to 32 exact files")
     seen = set()
     for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            raise ValueError("Each file needs an exact absolute path")
         path = entry["path"]
         if not Path(path).is_absolute() or any(c in path for c in "*?[]<>"):
             raise ValueError("Use absolute file paths; no globs or placeholders")
         if path in seen or ".." in Path(path).parts or str(Path(path)) != path:
             raise ValueError("Duplicate path or path containing unnecessary components")
         seen.add(path)
-        if not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]):
-            raise ValueError("Each file needs its pre-exercise SHA-256")
+        digest = entry.get("sha256")
+        if source == "synthetic":
+            if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ValueError("Each synthetic file needs its expected SHA-256")
+        elif "sha256" in entry and (
+                not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)):
+            raise ValueError("A legacy real-file SHA-256 must contain 64 lowercase hexadecimal characters")
     return entries
 
 
@@ -306,8 +313,6 @@ def run(manifest, send_loopback=False, send_to=None):
             continue
         collected[path] = base64.b64encode(content).decode("ascii")
         details = {"bytes": len(content), "sha256": digest}
-        if source == "real":
-            details["changed_since_setup"] = digest != entry["sha256"]
         emit("fixture_read", path=path, **details)
     if rejected:
         emit("execution_incomplete", rejected_files=rejected)

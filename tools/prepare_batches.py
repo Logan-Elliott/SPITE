@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create groups of fake test files or select existing real files without changing them."""
+"""Create groups of synthetic test files or select existing real files without changing them."""
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -7,6 +7,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import stat
 
 from seed_credentials import MOCK_DATA, seed_file
 import profile_paths
@@ -51,12 +52,11 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None,
     output.mkdir(mode=0o700)
     summary = {}
     failed = False
-    runner = load_runner() if source == "real" else None
     with (output / ("selection.jsonl" if source == "real" else "seeding.jsonl")).open("x", buffering=1) as log:
         for batch, targets in expanded.items():
             entries = []
             if source == "real":
-                counts = dict(collected=0, missing=0, unusable=0, unresolved=0)
+                counts = dict(selected=0, missing=0, unusable=0, unresolved=0)
                 for raw, path in targets:
                     record = dict(phase="pre-exercise-selection", batch=batch,
                                   path=str(path) if path is not None else raw,
@@ -65,15 +65,21 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None,
                         event = "unresolved"
                     else:
                         try:
-                            content = runner.read_fixture(path, None, follow_symlinks=True)
+                            # Metadata only. The default follows a listed symlink so
+                            # setup can select it when its target is a regular file.
+                            info = path.stat()
                         except FileNotFoundError:
                             event = "missing"
-                        except (OSError, ValueError) as exc:
+                        except OSError as exc:
                             event = "unusable"
                             record["error"] = str(exc)
                         else:
-                            entries.append(dict(path=str(path), sha256=hashlib.sha256(content).hexdigest()))
-                            event = "collected"
+                            if stat.S_ISREG(info.st_mode):
+                                entries.append(dict(path=str(path)))
+                                event = "selected"
+                            else:
+                                event = "unusable"
+                                record["error"] = "Expected a regular file"
                     record["event"] = event
                     counts[event] += 1
                     log.write(json.dumps(record) + "\n")

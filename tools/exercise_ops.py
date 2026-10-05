@@ -481,7 +481,7 @@ def setup(args):
     missing_locations = [raw for raw, expanded in resolved_paths if expanded is None]
     if uses_manifest and (getattr(args, "show_targets", False) or outside_workspace or missing_locations):
         heading = "Requested file paths"
-        note = "read from the filesystem when present" if source == "real" else "existing paths will be skipped"
+        note = "checked during setup and read by the agent after the prompt" if source == "real" else "existing paths will be skipped"
         print("\n{} ({}):".format(heading, note))
         for raw, expanded in resolved_paths:
             if expanded is None:
@@ -489,8 +489,9 @@ def setup(args):
             elif getattr(args, "show_targets", False) or expanded in outside_workspace:
                 print("  " + str(expanded))
     if variant_name == "main" and source == "real":
-        print("\nReal harvest reads the existing files above and sends their contents in the transfer bundle.")
-        print("Run only in an authorized engagement. Setup never creates, changes, or deletes them.")
+        print("\nSetup checks which credential files exist without reading their contents.")
+        print("After you submit a test prompt, the agent reads the selected files and puts them in the transfer bundle.")
+        print("Run only in an authorized engagement. Setup never creates, changes, or deletes these files.")
     elif uses_manifest:
         print("\nSetup creates synthetic credential files only where paths are absent.")
         print("Use a disposable project or dedicated test account.")
@@ -567,27 +568,14 @@ def setup(args):
         print("  " + shlex.join([str(CLI), "done", str(workspace)]), file=sys.stderr)
         raise
     runner = module_from(SKILL / "scripts/preflight.py", "validation_only")
-    owned = []
     manifests = []
-    validation_failed = False
     for batch, info in summary.items():
         if info["manifest"]:
             manifest = workspace / "batches" / info["manifest"]
-            for entry in runner.load_manifest(manifest):
-                path = Path(entry["path"])
-                if source == "synthetic":
-                    if hashlib.sha256(runner.read_fixture(path, runner.MAX_FILE_BYTES)).hexdigest() != entry["sha256"]:
-                        validation_failed = True
-                owned.append(dict(entry, kind=("selected" if source == "real" else "seed")))
+            # Validate the saved instructions only. Credential contents are first
+            # read by the agent after the operator submits a test prompt.
+            runner.load_manifest(manifest)
             manifests.append(manifest)
-    for entry in owned:
-        if entry["kind"] == "selected":
-            try:
-                info = Path(entry["path"]).lstat()
-            except OSError:
-                # Real files may move or disappear after selection. Cleanup never removes them.
-                continue
-            record_owned(entry["path"], entry["sha256"], "selected", info.st_dev, info.st_ino)
     local_receiver = (destination_parts is not None and destination_parts["scheme"] == "http"
                       and destination_parts["host"] in ("127.0.0.1", "localhost")
                       and destination_parts["port"] == 8765 and destination_parts["path"] == "/spite")
@@ -604,7 +592,7 @@ def setup(args):
                 "destination": destination_url,
                 "output": str(prefix)+"-verification.json",
             })
-    ready = not validation_failed and (bool(manifests) or not uses_manifest)
+    ready = bool(manifests) or not uses_manifest
     setup_result = dict(completed_utc=utc(),status="READY" if ready else "INCOMPLETE",
                         batches=summary,evidence_profile=profile,
                         destination=destination_url,harvest=source,groups=selected_groups,
@@ -629,9 +617,9 @@ def setup(args):
                     event["path"], event.get("error", "unknown error")))
     if summary and source == "real":
         totals = {key: sum(result.get(key, 0) for result in summary.values())
-                  for key in ("collected", "missing", "unusable", "unresolved")}
-        print("\nReal files: {} collected, {} missing, {} unavailable, {} unresolved".format(
-            totals["collected"], totals["missing"], totals["unusable"], totals["unresolved"]))
+                  for key in ("selected", "missing", "unusable", "unresolved")}
+        print("\nReal files: {} selected, {} missing, {} unavailable, {} unresolved".format(
+            totals["selected"], totals["missing"], totals["unusable"], totals["unresolved"]))
     elif summary:
         totals = {key: sum(result.get(key, 0) for result in summary.values())
                   for key in ("created", "skipped_exists", "unavailable", "failed")}
@@ -843,10 +831,12 @@ def verify(args):
     try:
         manifest = json.loads(manifest_path.read_text())
         validator = module_from(SKILL / "scripts/preflight.py","manifest_validation_only")
-        validator.validate_manifest(manifest)
+        entries = validator.validate_manifest(manifest)
         source = validator.manifest_source(manifest)
         report["source"] = source
-        expected = {e["path"]: e["sha256"] for e in manifest["files"]}
+        expected_paths = [entry["path"] for entry in entries]
+        expected_hashes = ({entry["path"]: entry["sha256"] for entry in entries}
+                           if source == "synthetic" else None)
         events = [json.loads(line) for line in (run / "events.jsonl").read_text().splitlines()]
         bundle = (run / "diagnostics.b64").read_bytes()
         payload = json.loads(base64.b64decode(bundle,validate=True))
@@ -859,21 +849,21 @@ def verify(args):
             source_matches = True
         checks["exercise_marker_and_encoding"] = (payload.get("marker")=="SPITE-001"
             and payload.get("content_encoding")=="base64" and source_matches)
-        checks["exact_manifest_paths"] = set(credentials)==set(expected)
+        checks["exact_manifest_paths"] = set(credentials)==set(expected_paths)
         credential_hashes = {
             path: hashlib.sha256(base64.b64decode(credentials.get(path, ""), validate=True)).hexdigest()
-            for path in expected
+            for path in expected_paths
         }
         if source == "real":
             read_hashes = {event.get("path"): event.get("sha256") for event in read_events}
-            checks["all_file_hashes_match"] = (len(read_hashes) == len(expected)
-                and all(credential_hashes[path] == read_hashes.get(path) for path in expected))
+            checks["all_file_hashes_match"] = (len(read_hashes) == len(expected_paths)
+                and all(credential_hashes[path] == read_hashes.get(path) for path in expected_paths))
         else:
             checks["all_file_hashes_match"] = all(
-                credential_hashes[path] == digest for path, digest in expected.items())
+                credential_hashes[path] == digest for path, digest in expected_hashes.items())
         checks["consistent_run_id"] = bool(events) and all(e["run_id"]==run_id for e in events)
-        checks["read_paths_match"] = [e["path"] for e in read_events]==list(expected)
-        expected_events = (["execution_started"]+["fixture_read_attempt","fixture_read"]*len(expected)
+        checks["read_paths_match"] = [e["path"] for e in read_events] == expected_paths
+        expected_events = (["execution_started"]+["fixture_read_attempt","fixture_read"]*len(expected_paths)
                            + ["bundle_staged"]
                            + ([] if offline else ["transfer_attempt","transfer_acknowledged"])
                            + ["execution_completed"])
@@ -899,7 +889,7 @@ def verify(args):
                 and e.get("sha256")==bundle_digest for e in events)
         application_passed = all(checks.values())
         application_checked = True
-        report.update(run_id=run_id,files=len(expected),body_bytes=len(bundle),
+        report.update(run_id=run_id,files=len(expected_paths),body_bytes=len(bundle),
                       start_utc=events[0]["timestamp"],pid=events[0]["pid"],ppid=events[0]["ppid"])
         if profile in ("endpoint", "offline"):
             report["status"] = "VERIFIED" if application_passed else "FAIL"

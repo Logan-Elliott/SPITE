@@ -288,7 +288,7 @@ class PreparePlaceholderTests(EnvClean):
             with patch.dict(os.environ, {"HOME": str(home)}):
                 real_summary, real_failed = prepare_batches.prepare(plan, workspace, root / "real", source="real")
             self.assertFalse(real_failed)
-            self.assertEqual(real_summary["sample"]["collected"], 3)
+            self.assertEqual(real_summary["sample"]["selected"], 3)
             real_manifest = json.loads((root / "real/sample.json").read_text())
             self.assertEqual([entry["path"] for entry in real_manifest["files"]], [str(path) for path in targets])
 
@@ -348,9 +348,9 @@ class PreparePlaceholderTests(EnvClean):
             self.assertFalse(failed)
             manifest = json.loads((root / "out/sample.json").read_text())
             self.assertEqual([e["path"] for e in manifest["files"]], [str(wanted / "Login Data")])
-            self.assertEqual((summary["sample"]["collected"], summary["sample"]["unresolved"]), (1, 1))
+            self.assertEqual((summary["sample"]["selected"], summary["sample"]["unresolved"]), (1, 1))
 
-    def test_real_collects_files_larger_than_the_old_per_file_limit(self):
+    def test_real_selects_files_larger_than_the_old_per_file_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             home = root / "home"
@@ -363,9 +363,9 @@ class PreparePlaceholderTests(EnvClean):
             plan = {"sample": [str(profile / "small"), str(profile / "huge")]}
             with patch.dict(os.environ, {"HOME": str(home)}):
                 summary, _ = prepare_batches.prepare(plan, workspace, root / "out", source="real")
-            self.assertEqual((summary["sample"]["collected"], summary["sample"]["unusable"]), (2, 0))
+            self.assertEqual((summary["sample"]["selected"], summary["sample"]["unusable"]), (2, 0))
 
-    def test_real_collects_files_larger_than_the_old_total_limit(self):
+    def test_real_selects_files_larger_than_the_old_total_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             profile = root / "data"
@@ -376,7 +376,7 @@ class PreparePlaceholderTests(EnvClean):
             workspace.mkdir()
             plan = {"sample": [str(profile / "one"), str(profile / "two")]}
             summary, _ = prepare_batches.prepare(plan, workspace, root / "out", source="real")
-            self.assertEqual((summary["sample"]["collected"], summary["sample"]["unusable"]), (2, 0))
+            self.assertEqual((summary["sample"]["selected"], summary["sample"]["unusable"]), (2, 0))
             self.assertNotIn("oversize", summary["sample"])
 
 
