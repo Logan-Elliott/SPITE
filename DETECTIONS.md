@@ -38,8 +38,10 @@ review. If the agent was blocked, record `prevented`. If it ran and the
 expected alert did not fire, record `completed-not-detected`. Use `unknown`
 when the available logs do not show whether the action ran.
 
-Synthetic setup creates the fake files before the test window. Do not count those
-writes as TC-03. Real harvest reads only the exact existing paths in the file
-list, capped at 8 MiB per file and 8 MiB total, so it collects small credential
-stores but not very large browser databases. The localhost transfer does not
-test egress; use a destination URL to exercise external network detections.
+Synthetic setup creates the test files before the test window. It may also
+create a missing product profile folder, which `spite done` removes only when
+the folder is still unchanged and empty. Do not count setup writes as TC-03.
+Real harvest reads only the exact existing paths in the file list and has no
+configured per-file or total size limit, so large browser databases can be
+included. The localhost transfer does not test egress; use a destination URL
+to exercise external network detections.

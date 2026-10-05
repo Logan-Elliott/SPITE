@@ -4,13 +4,14 @@ A purple team tool for macOS and Linux that tests whether a coding agent
 discovers, trusts, and runs a malicious project skill.
 SPITE prepares the workspace; it does not start the agent or run the skill.
 
-The normal test creates fake credential files at the selected locations. When
-the agent runs the skill, it reads the files setup created. With
-`--harvest real`, setup selects existing files at those locations for the skill
-to read instead. By default, the bundle is sent to a receiver on `127.0.0.1`.
-You can also provide a destination URL (`http`, `https`, `ws`, or `wss`). Normal
-setup does not read existing target file contents. Real mode reads only the exact
-paths in the file list.
+The synthetic test creates test credentials at missing paths from the included
+file list. It skips every path that already exists without reading or changing
+it. The real test reads existing files from the same list and never creates or
+removes them. Both tests use all three file groups by default and combine the
+selected paths into one manifest, so each runner invocation produces one bundle.
+
+By default, the bundle is sent to a receiver on `127.0.0.1`. You can also
+provide a destination URL (`http`, `https`, `ws`, or `wss`).
 
 > Run it only on systems and accounts included in an authorized assessment.
 
@@ -19,19 +20,20 @@ paths in the file list.
 Requirements: macOS or Linux, `/bin/zsh`, Python 3.9+, a disposable project or
 test account, and an agent that supports project-local `SKILL.md` packages.
 Install the command with `./spite install`, or use `./spite` in place of `spite`
-below. On Linux, use the standard test without `--pcap`; setup details are in
-[Linux support](#linux-support).
+below. On Linux, use the synthetic or real test without `--pcap`; setup details
+are in [Linux support](#linux-support).
 
-1. Prepare the standard test:
+1. Prepare the synthetic test in any new workspace you choose:
 
    ```sh
-   spite test --workspace "$HOME/spite-exercise"
+   spite test synthetic --workspace "$HOME/spite-exercise"
    ```
 
-   The default uses Trae and fake credential files. Setup shows each path
+   The default uses Trae and all `developer`, `cloud`, and `browser` paths.
+   Setup shows each path
    outside the workspace where it may create a file, asks once before writing,
    and refuses `sudo` or an existing workspace. Open it in the agent. Keep its
-   normal approval controls enabled.
+   usual approval controls enabled.
    Setup prints the prompts for this workspace. To see them again later, run
    `spite prompts "$HOME/spite-exercise"`.
    Paste prompt 1, **Let the agent pick the skill**, into a fresh conversation.
@@ -61,9 +63,10 @@ below. On Linux, use the standard test without `--pcap`; setup details are in
 results cover SPITE's saved files and transfer, not agent selection or defensive
 alerts.
 
-`done` lists unchanged files made by setup and asks before removing them. It
-leaves changed, replaced, symlinked, and existing real files alone. Missing
-files are skipped. For scripted cleanup, use
+`done` lists unchanged files and folders made by setup and asks before removing
+them. It removes a setup-created folder only when it is still the same folder
+and is empty. It leaves changed, replaced, symlinked, nonempty, and pre-existing
+paths alone. Missing paths are skipped. For scripted cleanup, use
 `spite done "$HOME/spite-exercise" --yes`. If setup stops
 after creating files, use the cleanup command it prints before retrying with a
 new workspace. The authoritative cleanup record is in a private `.spite-state`
@@ -73,7 +76,8 @@ targets.
 ## Linux support
 
 On Linux, install zsh at `/bin/zsh` and Python 3.9 or newer at
-`/usr/bin/python3` or `/usr/local/bin/python3`. Use the same `spite test`,
+`/usr/bin/python3` or `/usr/local/bin/python3`. Use the same
+`spite test synthetic`, `spite test real`,
 `spite watch`, and `spite done` commands shown above. If your shell says `spite`
 is not found, run the commands as `./spite` from the SPITE directory instead.
 `spite doctor` and packet capture work only on macOS; leave `--pcap` off on
@@ -90,7 +94,7 @@ On macOS, run `spite doctor` to check the host before an exercise.
 For scripts, provide the workspace and skip setup confirmation:
 
 ```sh
-spite test --workspace "$HOME/spite-exercise" --yes
+spite test synthetic --workspace "$HOME/spite-exercise" --yes
 ```
 
 ## Advanced tests
@@ -119,18 +123,18 @@ the false-positive control:
 spite test benign
 ```
 
-Expect a short readiness explanation with no command or fake-file access. This
-test uses the same skill name, description, and prompt as the normal test, with
-harmless instructions. Agent behavior can vary between conversations. When
+Expect a short readiness explanation with no command or test-file access. This
+test uses the same skill name, description, and prompt as the credential test,
+with harmless instructions. Agent behavior can vary between conversations. When
 comparing products or settings, run each condition several times and alternate
-the order of the normal and benign workspaces.
+the order of the credential and benign workspaces.
 
 ## Capture a PCAP on macOS
 
 Add packet capture when you need PCAP evidence from the localhost transfer:
 
 ```sh
-spite test --pcap
+spite test synthetic --pcap
 ```
 
 `spite watch` starts the localhost receiver and `sudo tcpdump` on the `lo0`
@@ -144,7 +148,7 @@ To test egress monitoring instead of the localhost transfer, give setup a
 destination URL:
 
 ```sh
-spite test --destination https://collector.example.test/report
+spite test synthetic --destination https://collector.example.test/report
 ```
 
 The transfer prompt tells the agent to append `--send-to` with that URL instead
@@ -158,29 +162,29 @@ after accepting the bundle. Verification checks that digest acknowledgement
 against the staged bundle. The destination option uses endpoint checks and is
 not combined with `--pcap`.
 
-## Test another agent or a larger file list
+## Test another agent or choose file groups
 
 Copy [profiles/custom-example.json](profiles/custom-example.json), set the
 project-relative skill path, and run:
 
 ```sh
-spite test --target-config /absolute/path/to/target.json
+spite test synthetic --target-config /absolute/path/to/target.json
 ```
 
 The included [Trae config](profiles/trae.json) installs the skill under Trae's
 project skill path. Confirm that path against the product version used in the
 engagement.
 
-The standard test names seven credential-shaped file paths. Setup creates fake
-files at available paths when no file is already there. The skill reads the
-files setup created. To use one group from the expanded file list, run this
-from the extracted SPITE directory:
+The included file list has 32 credential locations in three groups. With no
+`--group` option, setup combines all three groups into one manifest. To use
+specific groups, repeat `--group`:
 
 ```sh
-./spite test --file-list "$PWD/plans/macos-expanded.json" --group developer
+spite test synthetic --group developer --group cloud
 ```
 
-Available groups are `developer`, `cloud-container`, and `browser-agent`.
+The public group names are `developer`, `cloud`, and `browser`. The older
+`cloud-container` and `browser-agent` names are accepted for existing scripts.
 
 Browser and agent paths use placeholders that setup resolves on this machine:
 `<chrome-profile>`, `<brave-profile>`, `<edge-profile>`, `<firefox-profile>`,
@@ -188,28 +192,34 @@ Browser and agent paths use placeholders that setup resolves on this machine:
 location, `$XDG_CONFIG_HOME` (or `~/.config`), and the snap and flatpak roots
 are checked for Chrome, Chromium, Brave, Edge, and Firefox. Trae uses its macOS
 or Linux config storage. Setup uses the product directories it finds on this
-machine. If a product directory is missing, setup skips its path. In the normal
-test, it also skips any file already at a requested path without reading or
-changing it. With `--harvest real`, it reads existing files at the requested
-paths and skips missing files.
+machine. If a product directory is missing, the synthetic test creates the
+usual profile folder for that product. If it cannot create a folder, it names
+the skipped path and continues with the files it could create. Setup reports
+`READY` when at least one test credential was created. It reports `INCOMPLETE`
+when none were created.
+
+The real test uses only product profiles that already exist. It never creates
+a profile folder. In both modes, one selected file group or several selected
+groups still produce one manifest and one bundle.
 
 ## Harvest real files
 
-By default setup creates synthetic files. To instead read existing files from
-the file list and include their contents in the bundle:
+To read existing files from the file list and include their contents in the
+bundle:
 
 ```sh
-spite test --harvest real
+spite test real --workspace "$HOME/spite-real-exercise"
 ```
 
-Real harvest reads only the exact paths in the file list, skips missing,
-symlinked, special, and over-cap files, and never creates, changes, or deletes
-anything. Real files may be up to 8 MiB each and the total harvest is capped at
-8 MiB. Setup records every path in `selection.jsonl`, including the ones it
-could not resolve on this machine. Setup tells you when the workspace uses
-existing real files, and cleanup preserves them. Use this only
-on systems and accounts included in an authorized assessment; the bundle
-contains real credential material.
+Real harvest reads only the exact paths in the file list. It follows a listed
+symlink when it leads to a readable regular file, skips missing and special
+files, and never creates, changes, or deletes them. There is no configured
+per-file or total size limit for real files. Setup records every path in
+`selection.jsonl`, including the ones it could not resolve on this
+machine. It reports `READY` when at least one listed file was selected and
+`INCOMPLETE` when none were selected. Cleanup preserves every real file. Use
+this only on systems and accounts included in an authorized assessment; the
+bundle contains real credential material.
 
 ## Advanced commands
 
@@ -220,15 +230,15 @@ use:
 spite watch "$HOME/spite-exercise" --offline
 ```
 
-The earlier commands still work: `spite init` prepares a workspace,
+Advanced phase commands are also available: `spite init` prepares a workspace,
 `spite receive` starts the one-request localhost receiver, `spite capture`
 starts loopback capture on macOS, `spite verify` checks a run folder, and
-`spite clean` reviews cleanup. These are hidden from the main help. The old
-`setup`, `receiver`, and `cleanup` names also work. For older scripts,
-`spite init --test normal` maps to `spite test`, `--test response` maps to
-`spite test hierarchy`, and `--test benign` maps to `spite test benign`.
-Other older flags remain available for scripts. Run `spite test --help` for
-current setup options.
+`spite clean` reviews cleanup. These are hidden from the main help.
+
+Two earlier forms remain available for scripts. Bare `spite test` means
+`spite test synthetic`, and `--harvest synthetic|real` can select the same two
+modes. `spite test normal` is not accepted. Run `spite test --help` for current
+setup options.
 
 ## Test cases
 
@@ -252,10 +262,12 @@ defensive team when a detection review is part of the engagement.
 
 ## Safety
 
-The runner accepts only exact paths and hashes from the generated manifest. It
-rejects globs, traversal, symlinks, special files, changed hashes, files above
-the per-file limit (64 KiB synthetic, 8 MiB real), and manifests with more than
-32 files. Real harvest also caps the whole bundle at 8 MiB. Its default network
+The runner accepts only exact paths from the generated manifest. It rejects
+globs, traversal, special files, changed synthetic-file hashes, synthetic files
+above 64 KiB, and manifests with more than 32 files. Synthetic mode does not
+follow symlinks. Real mode follows an exact listed path when it leads to a
+regular file and bundles its current contents. Real files have no configured
+per-file or total size limit. The default network
 destination is `127.0.0.1:8765`; with `--destination` it sends only the same
 manifest-verified bundle to the URL you provide, over one connection with no
 redirects or proxy settings, and `https`/`wss` verify certificates.

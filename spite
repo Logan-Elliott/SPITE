@@ -15,7 +15,7 @@ Usage:
                               Prepare an optional control test
   spite prompts <workspace>  Show the agent prompts again
   spite watch <workspace>    Watch the transfer and verify the run
-  spite done <workspace>     Remove unchanged files created by setup
+  spite done <workspace>     Remove unchanged files and empty folders created by setup
   spite doctor               Check this system before an exercise
   spite install              Install this package in ~/.local
   spite update               Update the command from this package
