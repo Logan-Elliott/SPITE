@@ -275,7 +275,7 @@ class SetupRealTests(unittest.TestCase):
                 return real_open(path, flags, *open_args, **open_kwargs)
 
             def reject_credential_io_open(path, *open_args, **open_kwargs):
-                if os.fspath(path) == str(real):
+                if not isinstance(path, int) and os.fspath(path) == str(real):
                     raise AssertionError("real credential content was opened during setup")
                 return real_io_open(path, *open_args, **open_kwargs)
 

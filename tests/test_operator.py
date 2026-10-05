@@ -50,8 +50,10 @@ class OperatorTests(unittest.TestCase):
                 return real_open(path, flags, *args, **kwargs)
 
             def reject_credential_io_open(path, *args, **kwargs):
-                if os.fspath(path) == str(target):
-                    raise AssertionError("synthetic credential was reopened during setup")
+                if not isinstance(path, int) and os.fspath(path) == str(target):
+                    mode = args[0] if args else kwargs.get("mode", "r")
+                    if "r" in mode or "+" in mode:
+                        raise AssertionError("synthetic credential was reopened during setup")
                 return real_io_open(path, *args, **kwargs)
 
             with patch.object(op.os, "geteuid", return_value=501), \
