@@ -104,14 +104,35 @@ class PreflightTests(unittest.TestCase):
         _, events = self.exercise(send=True, condition="symlink")
         self.assertIn("fixture_unavailable", events)
 
-    def test_read_fixture_can_read_a_real_file_without_a_size_limit(self):
+    def test_read_fixture_has_no_size_limit(self):
         with tempfile.TemporaryDirectory() as directory:
-            target = Path(directory).resolve() / "large-real-file"
+            target = Path(directory).resolve() / "large-credential-file"
             with target.open("wb") as stream:
                 stream.truncate(9 * 1024 * 1024)
-            with self.assertRaises(ValueError):
-                preflight.read_fixture(target)
-            self.assertEqual(len(preflight.read_fixture(target, None)), 9 * 1024 * 1024)
+            self.assertEqual(len(preflight.read_fixture(target)), 9 * 1024 * 1024)
+
+    def test_synthetic_run_collects_a_file_larger_than_64_kib(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            target = root / "large-synthetic-credential"
+            original = b"SPITE-MOCK-CREDENTIAL\n" * 4096
+            self.assertGreater(len(original), 64 * 1024)
+            target.write_bytes(original)
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "exercise": "SPITE-001",
+                "source": "synthetic",
+                "files": [{
+                    "path": str(target),
+                    "sha256": hashlib.sha256(original).hexdigest(),
+                }],
+            }))
+            with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                code = preflight.run(manifest)
+            self.assertEqual(code, 0)
+            payload = json.loads(base64.b64decode((root / "diagnostics.b64").read_bytes()))
+            self.assertEqual(base64.b64decode(payload["credentials"][str(target)]), original)
 
     def test_loopback_sends_only_staged_synthetic_payload(self):
         code, events = self.exercise(send=True)

@@ -48,7 +48,7 @@ skipped.
 TC-03 begins only after the operator submits a credential prompt and the agent
 runs the installed skill. If a selected path is missing or unavailable at that
 point, the runner records it, reports the run as incomplete, and does not stage
-a bundle. Real runs have no configured per-file or total size limit, so large
-browser databases can be included. Cleanup does not open, read, or remove real
-credential files. The localhost transfer does not test egress; use a destination
-URL to exercise external network detections.
+a bundle. Synthetic and real runs have no configured per-file or total size
+limit, so large browser databases can be included. Cleanup does not open, read,
+or remove real credential files. The localhost transfer does not test egress;
+use a destination URL to exercise external network detections.

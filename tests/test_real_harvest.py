@@ -402,8 +402,34 @@ class VerifyRealTests(unittest.TestCase):
             args = argparse.Namespace(run=str(run), manifest=str(manifest), receipt=str(receipt), pcap=None,
                                       output=str(root / "report.json"), evidence_profile="endpoint",
                                       destination=None)
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(op.verify(args), 0)
+            real_os_open = os.open
+            real_io_open = io.open
+            real_builtin_open = builtins.open
+
+            def reject_credential_os_open(path, flags, *args, **kwargs):
+                name = os.fspath(path)
+                if name == str(target) or (name == target.name and kwargs.get("dir_fd") is not None):
+                    raise AssertionError("real credential was opened during verification")
+                return real_os_open(path, flags, *args, **kwargs)
+
+            def reject_credential_io_open(path, *args, **kwargs):
+                if not isinstance(path, int) and os.fspath(path) == str(target):
+                    raise AssertionError("real credential was opened during verification")
+                return real_io_open(path, *args, **kwargs)
+
+            def reject_credential_builtin_open(path, *args, **kwargs):
+                if not isinstance(path, int) and os.fspath(path) == str(target):
+                    raise AssertionError("real credential was opened during verification")
+                return real_builtin_open(path, *args, **kwargs)
+
+            def verify_without_credential_read():
+                with patch.object(op.os, "open", side_effect=reject_credential_os_open), \
+                     patch.object(io, "open", side_effect=reject_credential_io_open), \
+                     patch.object(builtins, "open", side_effect=reject_credential_builtin_open), \
+                     contextlib.redirect_stdout(io.StringIO()):
+                    return op.verify(args)
+
+            self.assertEqual(verify_without_credential_read(), 0)
             report = json.loads((root / "report.json").read_text())
             self.assertEqual(report["status"], "VERIFIED")
             self.assertEqual(report["source"], "real")
@@ -413,8 +439,7 @@ class VerifyRealTests(unittest.TestCase):
                 json.dumps(dict(run_id=run_id, pid=1, ppid=0, timestamp="2026-10-02T00:00:00Z", **e)) + "\n"
                 for e in events))
             args.output = str(root / "bad-report.json")
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(op.verify(args), 1)
+            self.assertEqual(verify_without_credential_read(), 1)
             failed = json.loads((root / "bad-report.json").read_text())
             self.assertFalse(failed["checks"]["all_file_hashes_match"])
 

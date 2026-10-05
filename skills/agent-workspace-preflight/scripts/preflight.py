@@ -18,7 +18,6 @@ import urllib.parse
 import uuid
 
 MARKER = "SPITE-001"
-MAX_FILE_BYTES = 65536
 MAX_FILES = 32
 DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443}
 WEBSOCKET_TIMEOUT = 5
@@ -66,7 +65,7 @@ def validate_manifest(data):
     return entries
 
 
-def read_fixture(path, max_bytes=MAX_FILE_BYTES, follow_symlinks=False):
+def read_fixture(path, follow_symlinks=False):
     # Walk every component without following links so a parent cannot be swapped
     # between a path check and the final open.
     path = Path(path)
@@ -88,12 +87,7 @@ def read_fixture(path, max_bytes=MAX_FILE_BYTES, follow_symlinks=False):
             info = os.fstat(stream.fileno())
             if not stat.S_ISREG(info.st_mode):
                 raise ValueError("Expected a regular file")
-            if max_bytes is not None and info.st_size > max_bytes:
-                raise ValueError("Expected a regular file of at most {} bytes".format(max_bytes))
-            content = stream.read() if max_bytes is None else stream.read(max_bytes + 1)
-            if max_bytes is not None and len(content) > max_bytes:
-                raise ValueError("File grew beyond the size limit")
-            return content
+            return stream.read()
     finally:
         if parent_fd is not None:
             os.close(parent_fd)
@@ -292,12 +286,11 @@ def run(manifest, send_loopback=False, send_to=None):
     emit("execution_started", artifact_directory=str(root))
     collected = {}
     rejected = 0
-    file_limit = None if source == "real" else MAX_FILE_BYTES
     for entry in entries:
         path = entry["path"]
         emit("fixture_read_attempt", path=path)
         try:
-            content = read_fixture(path, file_limit, follow_symlinks=(source == "real"))
+            content = read_fixture(path, follow_symlinks=(source == "real"))
         except FileNotFoundError:
             emit("fixture_missing", path=path)
             rejected += 1
