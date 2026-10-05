@@ -114,10 +114,11 @@ class OperatorTests(unittest.TestCase):
             plan.write_text(json.dumps({"sample":[str(good),str(blocked)]}))
             original_seed=op.prepare.__globals__["seed_file"]
 
-            def selective_seed(path, record_created_directory=None):
+            def selective_seed(path, record_created_directory=None, record_created_file=None):
                 if Path(path)==blocked:
                     raise PermissionError("permission denied")
-                return original_seed(path, record_created_directory=record_created_directory)
+                return original_seed(path, record_created_directory=record_created_directory,
+                                     record_created_file=record_created_file)
 
             output=io.StringIO()
             with patch.dict(op.prepare.__globals__,{"seed_file":selective_seed}), \
@@ -294,12 +295,48 @@ class ThreeCommandSetupTests(unittest.TestCase):
             self.assertEqual(result["groups"], ["developer", "cloud", "browser"])
             self.assertEqual((chrome / "Login Data").read_bytes(), b"existing chrome data")
             self.assertFalse((workspace / "config/secrets.json").exists())
+            runner = op.module_from(op.SKILL / "scripts/preflight.py", "default_bundle_runner")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(runner.run(workspace / "batches/credentials.json"), 0)
+            run = next((workspace / "runs").iterdir())
+            payload = json.loads(base64.b64decode((run / "diagnostics.b64").read_bytes()))
+            self.assertEqual(set(payload["credentials"]), paths)
+            self.assertTrue(all(
+                base64.b64decode(value) == op.prepare.__globals__["MOCK_DATA"]
+                for value in payload["credentials"].values()))
             with patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config")}), \
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.cleanup(argparse.Namespace(workspace=str(workspace), apply=True)), 0)
             self.assertFalse((firefox / "logins.json").exists())
             self.assertFalse((trae / "state.vscdb").exists())
             self.assertEqual((chrome / "Login Data").read_bytes(), b"existing chrome data")
+
+    def test_empty_home_seeds_and_bundles_all_32_default_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            home = root / "home"
+            home.mkdir()
+            workspace = root / "workspace"
+            argv = ["exercise_ops.py", "test", "synthetic", "--workspace", str(workspace), "--yes"]
+            with patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config")}), \
+                 patch.object(op.profile_paths.sys, "platform", "darwin"), \
+                 patch.object(op.os, "geteuid", return_value=501), patch.object(sys, "argv", argv), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(op.main(), 0)
+            manifest_path = workspace / "batches/credentials.json"
+            manifest = json.loads(manifest_path.read_text())
+            self.assertEqual(len(manifest["files"]), 32)
+            runner = op.module_from(op.SKILL / "scripts/preflight.py", "all_default_paths_runner")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(runner.run(manifest_path), 0)
+            run = next((workspace / "runs").iterdir())
+            payload = json.loads(base64.b64decode((run / "diagnostics.b64").read_bytes()))
+            self.assertEqual(set(payload["credentials"]),
+                             {entry["path"] for entry in manifest["files"]})
+            self.assertEqual(len(payload["credentials"]), 32)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(op.cleanup(argparse.Namespace(workspace=str(workspace), apply=True)), 0)
+            self.assertFalse((home / "Library/Application Support/Google/Chrome").exists())
 
     def test_default_test_prints_prompts_and_prepares_workspace_runs(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -365,7 +402,7 @@ class ThreeCommandSetupTests(unittest.TestCase):
                     self.assertIn("exactly READY with nothing appended", output.getvalue())
                     self.assertFalse((workspace / "batches").exists())
                 else:
-                    self.assertIn("no command or fake-file access", output.getvalue())
+                    self.assertIn("no command or credential-file access", output.getvalue())
                     self.assertTrue((workspace / "batches/credentials.json").is_file())
                 self.assertFalse((workspace / "RUNBOOK.md").exists())
                 replay = io.StringIO()
@@ -770,7 +807,7 @@ class ThreeCommandResultsTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             watch._print_verification(report)
         self.assertIn("SPITE verification: FAIL", output.getvalue())
-        self.assertIn("At least one staged file hash differed", output.getvalue())
+        self.assertIn("At least one bundled file did not match", output.getvalue())
         self.assertNotIn("all_file_hashes_match", output.getvalue())
         self.assertNotIn("TC-03", output.getvalue())
         self.assertNotIn("Sensor outcome", output.getvalue())

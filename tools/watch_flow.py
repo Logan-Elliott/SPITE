@@ -16,7 +16,7 @@ import uuid
 CHECK_MESSAGES = {
     "exercise_marker_and_encoding": "The staged bundle had a different marker or encoding; expected SPITE-001 with base64.",
     "exact_manifest_paths": "The staged bundle named different files; expected exactly the paths in the manifest.",
-    "all_file_hashes_match": "At least one staged file hash differed; expected every hash to match the manifest.",
+    "all_file_hashes_match": "At least one bundled file did not match the file content recorded by the runner.",
     "consistent_run_id": "The run records used different IDs; expected one ID throughout the run.",
     "read_paths_match": "The recorded file reads differed; expected one successful read for each manifest path.",
     "event_sequence": "The runner recorded a different sequence of steps; expected one complete run in order.",
@@ -256,7 +256,7 @@ def watch(args, ops):
     workspace = Path(args.workspace).expanduser().resolve(strict=True)
     setup = json.loads((workspace / "setup-result.json").read_text(encoding="utf-8"))
     if setup.get("skill_variant") != "main":
-        raise ValueError("spite watch is for the standard test. Run this workspace's prompt, then use spite done.")
+        raise ValueError("spite watch is for synthetic and real credential tests. Run this workspace's prompt, then use spite done.")
     saved = json.loads((workspace / "verification.json").read_text(encoding="utf-8"))
     if saved.get("mode") not in ("endpoint", "pcap") or not saved.get("manifest") or not saved.get("output"):
         raise ValueError("This workspace does not have a complete verification setup")

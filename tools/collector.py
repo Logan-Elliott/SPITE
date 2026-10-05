@@ -5,16 +5,14 @@ import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 
-MAX_BODY_BYTES = 20 * 1024 * 1024
-
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         self.connection.settimeout(5)
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if self.path != "/spite" or not 0 < length <= MAX_BODY_BYTES:
-                raise ValueError("Unexpected path or size")
+            if self.path != "/spite" or length <= 0:
+                raise ValueError("Unexpected path or empty body")
             body = self.rfile.read(length)
             payload = json.loads(base64.b64decode(body, validate=True))
             if not isinstance(payload, dict) or payload.get("marker") != "SPITE-001":

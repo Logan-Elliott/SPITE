@@ -205,7 +205,7 @@ class CombinedSetupTests(unittest.TestCase):
                 if variant=="benign-control":
                     self.assertTrue((workspace/"fixture").is_file())
                     self.assertTrue((workspace/".trae/skills/agent-workspace-preflight/scripts/preflight.py").is_file())
-                    self.assertIn("prepared fake-file manifest",prompts)
+                    self.assertIn("prepared synthetic credential manifest",prompts)
                     skill_text=installed.read_text()
                     self.assertIn("Do not run commands or use tools",skill_text)
                     self.assertIn("Do not open or read the provided manifest",skill_text)

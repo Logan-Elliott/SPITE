@@ -56,6 +56,18 @@ class ResolveTests(EnvClean):
                                          home=home, platform="darwin")
             self.assertEqual(path, wanted / "Login Data")
 
+    def test_profile_discovery_error_falls_back_only_for_synthetic(self):
+        home = Path("/home/operator")
+        workspace = Path("/tmp/workspace")
+        with patch.object(profile_paths, "discover", side_effect=PermissionError("blocked")):
+            self.assertEqual(
+                profile_paths.resolve("<chrome-profile>/Login Data", workspace, "synthetic",
+                                      home=home, platform="linux"),
+                home / ".config/google-chrome/Default/Login Data",
+            )
+            self.assertIsNone(profile_paths.resolve(
+                "<chrome-profile>/Login Data", workspace, "real", home=home, platform="linux"))
+
     def test_unknown_placeholder_is_rejected(self):
         with self.assertRaises(ValueError):
             profile_paths.resolve("<mystery>/x", Path("/tmp/ws"), "synthetic", home=Path("/home/nobody"))

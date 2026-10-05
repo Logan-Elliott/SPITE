@@ -175,13 +175,19 @@ def _firefox_roots(home):
 def discover(name, home):
     if name in CHROMIUM:
         for root in _chromium_roots(name, home):
-            profile = _chromium_profile(root)
+            try:
+                profile = _chromium_profile(root)
+            except OSError:
+                continue
             if profile is not None:
                 return profile
         return None
     if name == "firefox-profile":
         for root in _firefox_roots(home):
-            profile = _firefox_profile(root)
+            try:
+                profile = _firefox_profile(root)
+            except OSError:
+                continue
             if profile is not None:
                 return profile
         return None
@@ -215,7 +221,10 @@ def resolve(raw, workspace, source, home=None, platform=None):
             return str(workspace)
         if name not in PROFILE_NAMES:
             raise ValueError("Unknown path placeholder: <{}>".format(name))
-        found = discover(name, home)
+        try:
+            found = discover(name, home)
+        except OSError:
+            found = None
         if found is None and source == "synthetic":
             found = usual_profile(name, home, platform=platform)
         if found is None:

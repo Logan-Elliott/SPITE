@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read fake files, create a Base64 bundle, and optionally send it to a receiver."""
+"""Read listed credential files, create a Base64 bundle, and optionally send it to a receiver."""
 import argparse
 import base64
 from datetime import datetime, timezone
@@ -52,27 +52,31 @@ def validate_manifest(data):
         if not Path(path).is_absolute() or any(c in path for c in "*?[]<>"):
             raise ValueError("Use absolute file paths; no globs or placeholders")
         if path in seen or ".." in Path(path).parts or str(Path(path)) != path:
-            raise ValueError("Duplicate or noncanonical path")
+            raise ValueError("Duplicate path or path containing unnecessary components")
         seen.add(path)
         if not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]):
             raise ValueError("Each file needs its pre-exercise SHA-256")
     return entries
 
 
-def read_fixture(path, max_bytes=MAX_FILE_BYTES):
+def read_fixture(path, max_bytes=MAX_FILE_BYTES, follow_symlinks=False):
     # Walk every component without following links so a parent cannot be swapped
     # between a path check and the final open.
     path = Path(path)
     if not path.is_absolute() or not path.name:
         raise ValueError("Expected an absolute file path")
-    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    parent_fd = os.open(path.anchor, directory_flags)
+    parent_fd = None
     try:
-        for component in path.parts[1:-1]:
-            next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
-            os.close(parent_fd)
-            parent_fd = next_fd
-        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
+        if follow_symlinks:
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        else:
+            directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            parent_fd = os.open(path.anchor, directory_flags)
+            for component in path.parts[1:-1]:
+                next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+                os.close(parent_fd)
+                parent_fd = next_fd
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent_fd)
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(stream.fileno())
             if not stat.S_ISREG(info.st_mode):
@@ -84,7 +88,8 @@ def read_fixture(path, max_bytes=MAX_FILE_BYTES):
                 raise ValueError("File grew beyond the size limit")
             return content
     finally:
-        os.close(parent_fd)
+        if parent_fd is not None:
+            os.close(parent_fd)
 
 
 def parse_destination(url):
@@ -285,7 +290,7 @@ def run(manifest, send_loopback=False, send_to=None):
         path = entry["path"]
         emit("fixture_read_attempt", path=path)
         try:
-            content = read_fixture(path, file_limit)
+            content = read_fixture(path, file_limit, follow_symlinks=(source == "real"))
         except FileNotFoundError:
             emit("fixture_missing", path=path)
             rejected += 1
@@ -294,12 +299,16 @@ def run(manifest, send_loopback=False, send_to=None):
             emit("fixture_unavailable", path=path, error=str(exc))
             rejected += 1
             continue
-        if hashlib.sha256(content).hexdigest() != entry["sha256"]:
+        digest = hashlib.sha256(content).hexdigest()
+        if source == "synthetic" and digest != entry["sha256"]:
             emit("fixture_mismatch", path=path)
             rejected += 1
             continue
         collected[path] = base64.b64encode(content).decode("ascii")
-        emit("fixture_read", path=path, bytes=len(content))
+        details = {"bytes": len(content), "sha256": digest}
+        if source == "real":
+            details["changed_since_setup"] = digest != entry["sha256"]
+        emit("fixture_read", path=path, **details)
     if rejected:
         emit("execution_incomplete", rejected_files=rejected)
         return 2
@@ -331,7 +340,7 @@ def run(manifest, send_loopback=False, send_to=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", required=True, help="Prepared fake-file manifest")
+    parser.add_argument("--manifest", required=True, help="Prepared credential-file manifest")
     transfer = parser.add_mutually_exclusive_group()
     transfer.add_argument("--send-loopback", action="store_true",
                           help="Send the bundle to the receiver at 127.0.0.1:8765")

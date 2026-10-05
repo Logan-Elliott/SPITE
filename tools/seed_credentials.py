@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create fake credential files at exact paths without replacing existing entries."""
+"""Create synthetic credential files at exact paths without replacing existing entries."""
 import argparse
 from datetime import datetime, timezone
 import json
@@ -9,7 +9,20 @@ from pathlib import Path
 MOCK_DATA = b"# SPITE-001 synthetic exercise data; not a usable credential\nSPITE_MOCK_TOKEN=NOT-A-REAL-SECRET\n"
 
 
-def seed_file(path, record_created_directory=None):
+class CleanupStateError(RuntimeError):
+    """Setup created a path but could not save the information needed by cleanup."""
+
+
+def _unlink_if_same(parent_fd, name, device, inode):
+    try:
+        current = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+        if (current.st_dev, current.st_ino) == (device, inode):
+            os.unlink(name, dir_fd=parent_fd)
+    except OSError:
+        pass
+
+
+def seed_file(path, record_created_directory=None, record_created_file=None):
     """Create one file and report each parent directory created along the way."""
     path = Path(path)
     if not path.is_absolute() or ".." in path.parts or any(c in str(path) for c in "*?[]<>"):
@@ -33,8 +46,23 @@ def seed_file(path, record_created_directory=None):
                 except FileExistsError:
                     pass
                 if created_directory and record_created_directory is not None:
-                    record_created_directory(current)
+                    info = os.stat(component, dir_fd=parent_fd, follow_symlinks=False)
+                    try:
+                        record_created_directory(current, info.st_dev, info.st_ino)
+                    except Exception as exc:
+                        try:
+                            os.rmdir(component, dir_fd=parent_fd)
+                        except OSError:
+                            pass
+                        raise CleanupStateError(
+                            "Could not save cleanup information for created folder: " + str(current)
+                        ) from exc
                 next_fd = os.open(component, flags, dir_fd=parent_fd)
+                if created_directory and record_created_directory is not None:
+                    opened = os.fstat(next_fd)
+                    if (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino):
+                        os.close(next_fd)
+                        raise CleanupStateError("Created folder changed during setup: " + str(current))
             os.close(parent_fd)
             parent_fd = next_fd
         # Atomic exclusivity also protects against creation after the first check.
@@ -43,10 +71,27 @@ def seed_file(path, record_created_directory=None):
                          0o600, dir_fd=parent_fd)
         except FileExistsError:
             return "skipped_exists"
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(MOCK_DATA)
-            stream.flush()
-            os.fsync(stream.fileno())
+        info = os.fstat(fd)
+        try:
+            written = 0
+            while written < len(MOCK_DATA):
+                count = os.write(fd, MOCK_DATA[written:])
+                if count <= 0:
+                    raise OSError("Could not finish writing the synthetic credential")
+                written += count
+            os.fsync(fd)
+            if record_created_file is not None:
+                try:
+                    record_created_file(path, info.st_dev, info.st_ino)
+                except Exception as exc:
+                    raise CleanupStateError(
+                        "Could not save cleanup information for created file: " + str(path)
+                    ) from exc
+        except BaseException:
+            _unlink_if_same(parent_fd, path.name, info.st_dev, info.st_ino)
+            raise
+        finally:
+            os.close(fd)
         return "created"
     finally:
         os.close(parent_fd)

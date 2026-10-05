@@ -335,7 +335,7 @@ class EndpointProfileTests(unittest.TestCase):
         self.assertIn("spite watch "+str(workspace),prompts)
         self.assertFalse((workspace/"RUNBOOK.md").exists())
         self.assertEqual(json.loads((workspace/"verification.json").read_text())["receipt"],
-                         str(workspace/"evidence/sample.jsonl"))
+                         str(workspace/"evidence/credentials.jsonl"))
 
     def test_setup_quotes_destination_shell_characters(self):
         plan=self.root/"plan.json"

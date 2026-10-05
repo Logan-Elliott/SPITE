@@ -65,7 +65,7 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None,
                         event = "unresolved"
                     else:
                         try:
-                            content = runner.read_fixture(path, None)
+                            content = runner.read_fixture(path, None, follow_symlinks=True)
                         except FileNotFoundError:
                             event = "missing"
                         except (OSError, ValueError) as exc:
@@ -88,7 +88,15 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None,
                         event = "unavailable"
                     else:
                         try:
-                            event = seed_file(path, record_created_directory=record_created_directory)
+                            file_recorder = None
+                            if record_created is not None:
+                                file_recorder = lambda created_path, device, inode: record_created(
+                                    created_path, digest, device, inode)
+                            event = seed_file(
+                                path,
+                                record_created_directory=record_created_directory,
+                                record_created_file=file_recorder,
+                            )
                         except (OSError, ValueError) as exc:
                             event = "failed"
                             record["error"] = str(exc)
@@ -99,8 +107,6 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None,
                     if event == "created":
                         # Hash the known bytes just written; never read existing targets.
                         entries.append(dict(path=str(path), sha256=digest))
-                        if record_created:
-                            record_created(path, digest)
             if entries:
                 manifest = dict(exercise="SPITE-001", source=source, files=entries)
                 if source == "synthetic":
@@ -121,7 +127,7 @@ if __name__ == "__main__":
     parser.add_argument("--workspace", required=True, help="Existing exercise workspace")
     parser.add_argument("--output", required=True, help="New directory for manifests and setup results")
     parser.add_argument("--harvest", choices=("synthetic", "real"), default="synthetic",
-                        help="Create synthetic fake files or select existing real files")
+                        help="Create synthetic credential files or select existing real files")
     args = parser.parse_args()
     summary, failed = prepare(json.loads(Path(args.plan).read_text()), args.workspace, args.output, args.harvest)
     print(json.dumps(summary, indent=2))
