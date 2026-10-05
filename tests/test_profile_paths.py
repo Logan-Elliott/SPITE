@@ -192,15 +192,30 @@ class DiscoverTests(EnvClean):
             opened = []
 
             def record_open(path, flags, *args, **kwargs):
-                opened.append((Path(path), flags))
+                opened.append((os.fspath(path), flags, kwargs.get("dir_fd")))
                 return original_open(path, flags, *args, **kwargs)
 
             with patch.object(profile_paths.os, "open", side_effect=record_open):
                 found = profile_paths.discover("firefox-profile", home)
 
             self.assertEqual(found, fallback)
-            self.assertEqual([path for path, _ in opened], [ini])
-            self.assertTrue(opened[0][1] & os.O_NOFOLLOW)
+            self.assertEqual(opened[-1][0], ini.name)
+            self.assertIsNotNone(opened[-1][2])
+            self.assertTrue(all(flags & os.O_NOFOLLOW for _, flags, _ in opened))
+
+    def test_firefox_does_not_follow_a_symlinked_profiles_ini_parent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            actual = home / "actual-firefox"
+            redirected = actual / "redirected.default"
+            redirected.mkdir(parents=True)
+            (actual / "profiles.ini").write_text(
+                "[Profile0]\nName=redirected\nPath=redirected.default\nDefault=1\n")
+            linked_parent = home / "linked-firefox"
+            linked_parent.symlink_to(actual, target_is_directory=True)
+
+            with self.assertRaises(OSError):
+                profile_paths._read_ini(linked_parent / "profiles.ini")
 
     def test_firefox_ignores_a_fifo_profiles_ini_without_blocking(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -214,7 +229,7 @@ class DiscoverTests(EnvClean):
             original_open = os.open
 
             def require_nonblocking_open(path, flags, *args, **kwargs):
-                if Path(path) == ini:
+                if os.fspath(path) == ini.name and kwargs.get("dir_fd") is not None:
                     self.assertTrue(flags & os.O_NONBLOCK)
                 return original_open(path, flags, *args, **kwargs)
 

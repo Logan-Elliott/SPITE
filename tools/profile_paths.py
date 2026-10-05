@@ -103,10 +103,25 @@ def _chromium_profile(root):
 
 
 def _read_ini(path):
-    if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK"):
+    if (not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_NONBLOCK")
+            or not hasattr(os, "O_DIRECTORY")):
         raise OSError("Cannot safely read profiles.ini on this platform")
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    path = Path(path)
+    if not path.is_absolute() or not path.name or ".." in path.parts:
+        raise OSError("Cannot safely read a relative profiles.ini path")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    parent_descriptor = os.open(path.anchor, directory_flags)
+    descriptor = None
     try:
+        for component in path.parts[1:-1]:
+            next_descriptor = os.open(component, directory_flags, dir_fd=parent_descriptor)
+            os.close(parent_descriptor)
+            parent_descriptor = next_descriptor
+        descriptor = os.open(
+            path.name,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=parent_descriptor,
+        )
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             return {}
         with os.fdopen(descriptor, encoding="utf-8", errors="replace") as handle:
@@ -115,6 +130,7 @@ def _read_ini(path):
     finally:
         if descriptor is not None:
             os.close(descriptor)
+        os.close(parent_descriptor)
 
     sections = {}
     current = None
