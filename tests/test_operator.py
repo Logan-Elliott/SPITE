@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import struct
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -366,6 +367,123 @@ class ThreeCommandResultsTests(unittest.TestCase):
             self.assertEqual(reports[0]["status"], "VERIFIED")
             self.assertEqual(reports[0]["run_id"], json.loads((second / "events.jsonl").read_text().splitlines()[0])["run_id"])
             self.assertFalse((workspace / "watch-results.jsonl").exists())
+
+    def test_watch_requests_capture_shutdown_without_killing_launcher(self):
+        watch = op.module_from(op.ROOT / "tools/watch_flow.py", "capture_stop_test")
+        with tempfile.TemporaryDirectory() as temporary:
+            stop_file = Path(temporary) / "capture.stop"
+
+            class Capture:
+                stdout = None
+
+                def __init__(self):
+                    self.terminated = False
+                    self.killed = False
+
+                def poll(self):
+                    return None
+
+                def communicate(self, timeout=None):
+                    self.timeout = timeout
+                    self.stop_contents = stop_file.read_text()
+                    return ("", "")
+
+                def terminate(self):
+                    self.terminated = True
+
+                def kill(self):
+                    self.killed = True
+
+            capture = Capture()
+            watch._stop_capture(capture, stop_file)
+            self.assertEqual(capture.timeout, 20)
+            self.assertEqual(capture.stop_contents, "stop\n")
+            self.assertFalse(capture.terminated)
+            self.assertFalse(capture.killed)
+            self.assertFalse(stop_file.exists())
+
+    def test_watch_capture_shutdown_has_no_unbounded_wait(self):
+        watch = op.module_from(op.ROOT / "tools/watch_flow.py", "capture_stop_timeout_test")
+        with tempfile.TemporaryDirectory() as temporary:
+            stop_file = Path(temporary) / "capture.stop"
+
+            class Output:
+                def __init__(self):
+                    self.closed = False
+
+                def close(self):
+                    self.closed = True
+
+            class Capture:
+                def __init__(self):
+                    self.stdout = Output()
+                    self.timeouts = []
+                    self.terminated = False
+                    self.killed = False
+
+                def poll(self):
+                    return None
+
+                def communicate(self, timeout=None):
+                    self.timeouts.append(timeout)
+                    raise subprocess.TimeoutExpired("capture", timeout)
+
+                def terminate(self):
+                    self.terminated = True
+
+                def kill(self):
+                    self.killed = True
+
+            capture = Capture()
+            with self.assertRaisesRegex(RuntimeError, "did not stop"):
+                watch._stop_capture(capture, stop_file)
+            self.assertEqual(capture.timeouts, [20, 5, 5])
+            self.assertTrue(capture.terminated)
+            self.assertTrue(capture.killed)
+            self.assertTrue(capture.stdout.closed)
+            self.assertFalse(stop_file.exists())
+
+    def test_capture_stops_tcpdump_when_stop_file_appears(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "traffic.pcap"
+            stop_file = root / "capture.stop"
+            stop_file.write_text("stop\n")
+
+            class Tcpdump:
+                def __init__(self):
+                    self.stderr = io.StringIO(
+                        "tcpdump: listening on lo0, link-type NULL (BSD loopback)\n")
+                    self.stopped = False
+
+                def poll(self):
+                    return 0 if self.stopped else None
+
+                def send_signal(self, sent_signal):
+                    self.sent_signal = sent_signal
+                    self.stopped = True
+
+                def communicate(self, timeout=None):
+                    return (None, "1 packet captured\n")
+
+                def kill(self):
+                    self.stopped = True
+
+                def wait(self, timeout=None):
+                    self.stopped = True
+                    return 0
+
+            tcpdump = Tcpdump()
+            args = argparse.Namespace(output=str(output), timeout=30,
+                                      stop_file=str(stop_file))
+            with patch.object(op.sys, "platform", "darwin"), \
+                 patch.object(op.os, "geteuid", return_value=0), \
+                 patch.object(op.subprocess, "Popen", return_value=tcpdump), \
+                 patch.object(op.time, "sleep"), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(op.capture(args), 0)
+            self.assertEqual(tcpdump.sent_signal, op.signal.SIGINT)
+            self.assertTrue(output.is_file())
 
     def test_watch_offline_uses_newest_no_receiver_run_even_if_incomplete(self):
         with tempfile.TemporaryDirectory() as temporary:

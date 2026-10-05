@@ -151,11 +151,18 @@ def _start(command, label, timeout):
     raise RuntimeError(label + " did not start. Check the message above and try again.")
 
 
-def _stop_capture(process):
+def _stop_capture(process, stop_file=None):
     if process is None:
         return
-    if process.poll() is None:
-        process.send_signal(signal.SIGINT)
+    try:
+        if process.poll() is not None:
+            if process.stdout:
+                process.stdout.close()
+            return
+        if stop_file is not None:
+            Path(stop_file).write_text("stop\n", encoding="utf-8")
+        else:
+            process.send_signal(signal.SIGINT)
         try:
             process.communicate(timeout=20)
         except subprocess.TimeoutExpired:
@@ -164,9 +171,15 @@ def _stop_capture(process):
                 process.communicate(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
-                process.communicate()
-    elif process.stdout:
-        process.stdout.close()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired as exc:
+                    if process.stdout:
+                        process.stdout.close()
+                    raise RuntimeError("Packet capture did not stop") from exc
+    finally:
+        if stop_file is not None:
+            Path(stop_file).unlink(missing_ok=True)
 
 
 def _stop_receiver(process):
@@ -263,6 +276,7 @@ def watch(args, ops):
     pcap = None
     receiver = None
     capture = None
+    capture_stop = None
     run = None
     reason = None
     earlier_status = None
@@ -288,8 +302,10 @@ def watch(args, ops):
         else:
             if saved.get("mode") == "pcap":
                 pcap = _unused_path(saved["pcap"])
+                capture_stop = _unused_path(Path(str(pcap) + ".stop"))
                 capture = _start([str(ops.CLI), "capture", "--output", str(pcap),
-                                  "--timeout", str(timeout)], "PCAP", timeout)
+                                  "--timeout", str(timeout), "--stop-file", str(capture_stop)],
+                                 "PCAP", timeout)
             receipt = _unused_path(saved["receipt"])
             receiver = _start([sys.executable, str(Path(ops.__file__).resolve()), "receive",
                                "--output", str(receipt), "--timeout", str(timeout)],
@@ -312,7 +328,11 @@ def watch(args, ops):
         reason = str(exc)
     finally:
         _stop_receiver(receiver)
-        _stop_capture(capture)
+        try:
+            _stop_capture(capture, capture_stop)
+        except (OSError, RuntimeError) as exc:
+            if reason is None:
+                reason = str(exc)
 
     if earlier_status is not None:
         print("Transfer run:")

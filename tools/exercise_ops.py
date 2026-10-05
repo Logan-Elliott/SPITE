@@ -589,6 +589,8 @@ def receiver(args):
 
 def capture(args):
     output = ask_path(args.output, "New packet capture path (.pcap): ")
+    stop_value = getattr(args, "stop_file", None)
+    stop_file = Path(stop_value) if stop_value else None
     if sys.platform != "darwin":
         raise ValueError("Capture launcher targets macOS lo0")
     if os.geteuid() != 0:
@@ -608,18 +610,32 @@ def capture(args):
             print("PCAP READY. Start the receiver in another terminal. Stop with Ctrl-C after the agent finishes.", flush=True)
             print("Automatic maximum duration: {} seconds".format(args.timeout), flush=True)
             try:
-                _, remaining = process.communicate(timeout=args.timeout)
-            except (KeyboardInterrupt, subprocess.TimeoutExpired):
+                deadline = time.monotonic() + args.timeout
+                while process.poll() is None and time.monotonic() < deadline:
+                    if stop_file is not None and stop_file.exists():
+                        break
+                    time.sleep(0.2)
+            except KeyboardInterrupt:
+                pass
+            if process.poll() is None:
                 # Allow BPF buffers to reach tcpdump before requesting its flush.
                 time.sleep(2)
                 process.send_signal(signal.SIGINT)
+            try:
                 _, remaining = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                _, remaining = process.communicate(timeout=5)
             log.write(remaining)
             print(remaining, end="")
         finally:
             if process.poll() is None:
                 process.send_signal(signal.SIGINT)
-                process.wait(timeout=10)
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
             for path in (output, stats):
                 os.chmod(path, 0o600)
                 if os.environ.get("SUDO_UID"):
@@ -956,6 +972,7 @@ def main():
                      description="Capture TCP port 8765 on the macOS loopback interface.")
     p.add_argument("--output",help="New PCAP file")
     p.add_argument("--timeout",type=int,default=900,help="Maximum capture time in seconds (default: 900)")
+    p.add_argument("--stop-file",help=argparse.SUPPRESS)
     p=sub.add_parser("verify",help="Check saved evidence",
                      description="Check a run folder against the files saved during setup.")
     p.add_argument("run",nargs="?",help="Run folder reported by the agent")
