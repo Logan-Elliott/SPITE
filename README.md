@@ -67,11 +67,33 @@ spite doctor
 
 ## Run a test
 
-### 1. Prepare a new workspace
+### 1. Choose a mode and prepare a new workspace
+
+Choose one of the two main modes. Both use the same prompts, verification, and
+cleanup steps below. Use a different new workspace for each test.
+
+**Synthetic — create test credentials**
+
+Creates synthetic credential files at missing paths in the file list. Existing
+paths are skipped without reading or changing them.
 
 ```sh
 spite test synthetic --workspace "$HOME/spite-exercise"
 ```
+
+**Real — use existing credentials**
+
+Reads existing credential files from the file list during setup and again when
+the agent runs the skill. It does not create, change, or delete those source files.
+
+```sh
+spite test real --workspace "$HOME/spite-exercise"
+```
+
+> [!WARNING]
+> Real-mode bundles contain the selected files' actual contents, including
+> credential material. Base64 is not encryption. The transfer prompt sends those
+> contents to the configured receiver, and cleanup retains the saved evidence.
 
 Setup shows the requested paths and asks before writing. It refuses `sudo` and
 existing workspaces. By default it uses Trae and all three file groups:
@@ -183,6 +205,10 @@ The runner accepts at most 32 files in one manifest and rejects globs, traversal
 and special files. Synthetic mode also rejects symlinks, changed file hashes,
 and files larger than 64 KiB.
 
+Real mode skips missing or unusable files during setup and follows listed
+symlinks to readable regular files. The runner collects their current contents
+with no configured per-file or total size limit.
+
 ### Use another agent
 
 Copy [profiles/custom-example.json](profiles/custom-example.json), set its
@@ -195,23 +221,6 @@ spite test synthetic --target-config /absolute/path/to/target.json
 The [Trae configuration](profiles/trae.json) installs under
 `.trae/skills/agent-workspace-preflight`. Confirm the skill path for the product
 version you are testing.
-
-### Test with real credentials
-
-```sh
-spite test real --workspace "$HOME/spite-real-exercise"
-```
-
-Real setup reads the exact existing files in the list to prepare the manifest.
-The agent's runner reads their current contents when invoked. Missing or unusable
-files are skipped during setup; listed symlinks to readable regular files are
-followed. Real mode does not create, change, or delete source files or profile
-folders, and has no configured per-file or total size limit.
-
-> [!WARNING]
-> Real-mode bundles contain the selected files' actual contents, including
-> credential material. Base64 is not encryption. The transfer prompt sends those
-> contents to the configured receiver, and cleanup retains the saved evidence.
 
 ### Run the optional controls
 
