@@ -1,5 +1,6 @@
 import argparse
 import base64
+import builtins
 import contextlib
 import hashlib
 import importlib.util
@@ -71,19 +72,29 @@ class PrepareRealTests(unittest.TestCase):
             link.symlink_to(target)
             real_open = os.open
             real_io_open = io.open
+            real_builtin_open = builtins.open
 
             def reject_credential_open(path, flags, *args, **kwargs):
-                if kwargs.get("dir_fd") is None and os.fspath(path) in (str(target), str(link)):
+                if not isinstance(path, int) and (
+                        os.fspath(path) in (str(target), str(link))
+                        or (kwargs.get("dir_fd") is not None
+                            and os.fspath(path) in (target.name, link.name))):
                     raise AssertionError("credential content was opened during setup")
                 return real_open(path, flags, *args, **kwargs)
 
             def reject_credential_io_open(path, *args, **kwargs):
-                if os.fspath(path) in (str(target), str(link)):
+                if not isinstance(path, int) and os.fspath(path) in (str(target), str(link)):
                     raise AssertionError("credential content was opened during setup")
                 return real_io_open(path, *args, **kwargs)
 
+            def reject_credential_builtin_open(path, *args, **kwargs):
+                if not isinstance(path, int) and os.fspath(path) in (str(target), str(link)):
+                    raise AssertionError("credential content was opened during setup")
+                return real_builtin_open(path, *args, **kwargs)
+
             with patch.object(os, "open", side_effect=reject_credential_open), \
-                 patch.object(io, "open", side_effect=reject_credential_io_open):
+                 patch.object(io, "open", side_effect=reject_credential_io_open), \
+                 patch.object(builtins, "open", side_effect=reject_credential_builtin_open):
                 summary, failed = op.prepare(
                     {"sample": [str(target), str(link)]}, root, root / "results", source="real")
             self.assertFalse(failed)
@@ -268,9 +279,12 @@ class SetupRealTests(unittest.TestCase):
                                       harvest="real", evidence_profile="endpoint")
             real_open = os.open
             real_io_open = io.open
+            real_builtin_open = builtins.open
 
             def reject_credential_open(path, flags, *open_args, **open_kwargs):
-                if open_kwargs.get("dir_fd") is None and os.fspath(path) == str(real):
+                if not isinstance(path, int) and (
+                        os.fspath(path) == str(real)
+                        or (open_kwargs.get("dir_fd") is not None and os.fspath(path) == real.name)):
                     raise AssertionError("real credential content was opened during setup")
                 return real_open(path, flags, *open_args, **open_kwargs)
 
@@ -279,10 +293,16 @@ class SetupRealTests(unittest.TestCase):
                     raise AssertionError("real credential content was opened during setup")
                 return real_io_open(path, *open_args, **open_kwargs)
 
+            def reject_credential_builtin_open(path, *open_args, **open_kwargs):
+                if not isinstance(path, int) and os.fspath(path) == str(real):
+                    raise AssertionError("real credential content was opened during setup")
+                return real_builtin_open(path, *open_args, **open_kwargs)
+
             output = io.StringIO()
             with patch.object(op.os, "geteuid", return_value=501), \
                  patch.object(op.os, "open", side_effect=reject_credential_open), \
                  patch.object(io, "open", side_effect=reject_credential_io_open), \
+                 patch.object(builtins, "open", side_effect=reject_credential_builtin_open), \
                  contextlib.redirect_stdout(output):
                 self.assertEqual(op.setup(args), 0)
             self.assertEqual(real.read_bytes(), b"REAL=1\n")
@@ -319,6 +339,7 @@ class SetupRealTests(unittest.TestCase):
                 files=[entry], directories=[]))
             real_open = os.open
             real_io_open = io.open
+            real_builtin_open = builtins.open
 
             def reject_credential_open(path, flags, *args, **kwargs):
                 name = os.fspath(path)
@@ -327,12 +348,18 @@ class SetupRealTests(unittest.TestCase):
                 return real_open(path, flags, *args, **kwargs)
 
             def reject_credential_io_open(path, *args, **kwargs):
-                if os.fspath(path) == str(target):
+                if not isinstance(path, int) and os.fspath(path) == str(target):
                     raise AssertionError("legacy selected credential was opened during cleanup")
                 return real_io_open(path, *args, **kwargs)
 
+            def reject_credential_builtin_open(path, *args, **kwargs):
+                if not isinstance(path, int) and os.fspath(path) == str(target):
+                    raise AssertionError("legacy selected credential was opened during cleanup")
+                return real_builtin_open(path, *args, **kwargs)
+
             with patch.object(op.os, "open", side_effect=reject_credential_open), \
                  patch.object(io, "open", side_effect=reject_credential_io_open), \
+                 patch.object(builtins, "open", side_effect=reject_credential_builtin_open), \
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.cleanup(argparse.Namespace(
                     workspace=str(workspace), apply=True)), 0)

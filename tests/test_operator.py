@@ -1,5 +1,6 @@
 import argparse
 import base64
+import builtins
 import contextlib
 import importlib.util
 import io
@@ -42,9 +43,12 @@ class OperatorTests(unittest.TestCase):
             plan.write_text(json.dumps({"sample": [str(target)]}))
             real_open = os.open
             real_io_open = io.open
+            real_builtin_open = builtins.open
 
             def reject_credential_read(path, flags, *args, **kwargs):
-                if os.fspath(path) == target.name and kwargs.get("dir_fd") is not None:
+                if not isinstance(path, int) and (
+                        os.fspath(path) == str(target)
+                        or (os.fspath(path) == target.name and kwargs.get("dir_fd") is not None)):
                     if not flags & (os.O_WRONLY | os.O_RDWR):
                         raise AssertionError("synthetic credential was reopened during setup")
                 return real_open(path, flags, *args, **kwargs)
@@ -56,9 +60,17 @@ class OperatorTests(unittest.TestCase):
                         raise AssertionError("synthetic credential was reopened during setup")
                 return real_io_open(path, *args, **kwargs)
 
+            def reject_credential_builtin_open(path, *args, **kwargs):
+                if not isinstance(path, int) and os.fspath(path) == str(target):
+                    mode = args[0] if args else kwargs.get("mode", "r")
+                    if "r" in mode or "+" in mode:
+                        raise AssertionError("synthetic credential was reopened during setup")
+                return real_builtin_open(path, *args, **kwargs)
+
             with patch.object(op.os, "geteuid", return_value=501), \
                  patch.object(op.os, "open", side_effect=reject_credential_read), \
                  patch.object(io, "open", side_effect=reject_credential_io_open), \
+                 patch.object(builtins, "open", side_effect=reject_credential_builtin_open), \
                  contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.setup(argparse.Namespace(
                     plan=str(plan), workspace=str(workspace), apply=True)), 0)
@@ -239,8 +251,30 @@ class OperatorTests(unittest.TestCase):
             capture=root/"traffic.pcap"
             capture.write_bytes(pcap([(50000,8765,100,request[:80]),(50000,8765,180,request[80:]),(8765,50000,200,b"HTTP/1.0 204 No Content\r\n\r\n")]))
             args=argparse.Namespace(run=str(run),manifest=str(manifest),receipt=str(receipt),pcap=str(capture),output=str(root/"report.json"),evidence_profile="pcap")
-            # Prove verification never invokes fixture reads.
-            with patch.object(runner,"read_fixture",side_effect=AssertionError("No hotspot reads")),contextlib.redirect_stdout(io.StringIO()):
+            real_open = os.open
+            real_io_open = io.open
+            real_builtin_open = builtins.open
+
+            def reject_target_os_open(path, flags, *open_args, **open_kwargs):
+                if not isinstance(path, int) and os.fspath(path) in (str(mock), mock.name):
+                    raise AssertionError("verification read a credential file")
+                return real_open(path, flags, *open_args, **open_kwargs)
+
+            def reject_target_io_open(path, *open_args, **open_kwargs):
+                if not isinstance(path, int) and os.fspath(path) == str(mock):
+                    raise AssertionError("verification read a credential file")
+                return real_io_open(path, *open_args, **open_kwargs)
+
+            def reject_target_builtin_open(path, *open_args, **open_kwargs):
+                if not isinstance(path, int) and os.fspath(path) == str(mock):
+                    raise AssertionError("verification read a credential file")
+                return real_builtin_open(path, *open_args, **open_kwargs)
+
+            # Verification checks saved run evidence without reopening credentials.
+            with patch.object(op.os, "open", side_effect=reject_target_os_open), \
+                 patch.object(io, "open", side_effect=reject_target_io_open), \
+                 patch.object(builtins, "open", side_effect=reject_target_builtin_open), \
+                 contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.verify(args),0)
             capture.write_bytes(pcap([]));args.output=str(root/"empty.json")
             with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(op.verify(args),2)
