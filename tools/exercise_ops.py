@@ -481,7 +481,8 @@ def setup(args):
     missing_locations = [raw for raw, expanded in resolved_paths if expanded is None]
     if uses_manifest and (getattr(args, "show_targets", False) or outside_workspace or missing_locations):
         heading = "Requested file paths"
-        note = "checked during setup and read by the agent after the prompt" if source == "real" else "existing paths will be skipped"
+        note = ("checked during setup; read only when the agent runs the skill"
+                if source == "real" else "existing paths will be skipped")
         print("\n{} ({}):".format(heading, note))
         for raw, expanded in resolved_paths:
             if expanded is None:
