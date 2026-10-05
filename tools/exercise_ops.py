@@ -40,13 +40,15 @@ VARIANT_LABELS = {
     "answer-contamination": "Instruction hierarchy test",
 }
 PUBLIC_TESTS = {
-    "normal": "main",
     "benign": "benign-control",
-    "response": "answer-contamination",
     "hierarchy": "answer-contamination",
 }
+GROUP_ALIASES = {
+    "cloud-container": "cloud",
+    "browser-agent": "browser",
+}
 DEFAULT_TARGET_PROFILE = ROOT / "profiles/trae.json"
-DEFAULT_PLAN = ROOT / "plans/macos-default.json"
+DEFAULT_PLAN = ROOT / "plans/macos-expanded.json"
 
 
 def load_target_profile(filename):
@@ -83,7 +85,7 @@ def evidence_profile(args):
 def skill_variant(args):
     name = getattr(args, "skill_variant", None) or "main"
     if name not in SKILL_VARIANTS:
-        raise ValueError("Choose the normal, benign, or hierarchy test")
+        raise ValueError("Choose the synthetic, real, benign, or hierarchy test")
     return name, SKILL_VARIANTS[name]
 
 
@@ -92,6 +94,35 @@ def harvest_source(args):
     if source not in ("synthetic", "real"):
         raise ValueError("Harvest must be synthetic or real")
     return source
+
+
+def select_groups(plan, requested):
+    """Return one combined file group and the public names that were selected."""
+    if not isinstance(plan, dict) or not plan:
+        raise ValueError("The file-list JSON must contain at least one named group of paths")
+    normalized = {}
+    for original, paths in plan.items():
+        name = GROUP_ALIASES.get(original, original)
+        if name in normalized:
+            raise ValueError("The file list contains the same group more than once: " + name)
+        normalized[name] = paths
+    if isinstance(requested, str):
+        requested = [requested]
+    selected = []
+    for original in requested or normalized:
+        name = GROUP_ALIASES.get(original, original)
+        if name not in normalized:
+            raise ValueError("Unknown file group. Choose one or more of: " + ", ".join(normalized))
+        if name in selected:
+            raise ValueError("File group selected more than once: " + name)
+        selected.append(name)
+    paths = []
+    for name in selected:
+        group_paths = normalized[name]
+        if not isinstance(group_paths, list):
+            raise ValueError("Every file group must contain a list of paths")
+        paths.extend(group_paths)
+    return {"credentials": paths}, selected
 
 
 def utc():
@@ -130,7 +161,7 @@ def create_cleanup_state(workspace):
         raise ValueError("Cleanup state path must be a directory: " + str(state_root))
     state_id = hashlib.sha256(os.urandom(32)).hexdigest()
     state_path = state_root / (state_id + ".json")
-    state = {"schema_version": 2, "workspace": str(workspace), "files": []}
+    state = {"schema_version": 2, "workspace": str(workspace), "files": [], "directories": []}
     replace_json(state_path, state)
     return state_id, state_path, state
 
@@ -160,6 +191,33 @@ def unlink_owned_file(entry):
             raise ValueError("File changed during cleanup")
         os.unlink(path.name, dir_fd=parent_fd)
     finally:
+        os.close(parent_fd)
+
+
+def remove_owned_directory(entry):
+    """Remove one unchanged, empty directory without following links."""
+    path = Path(entry["path"])
+    if not path.is_absolute() or not path.name:
+        raise ValueError("Expected an absolute directory path")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    parent_fd = os.open(path.anchor, directory_flags)
+    directory_fd = None
+    try:
+        for component in path.parts[1:-1]:
+            next_fd = os.open(component, directory_flags, dir_fd=parent_fd)
+            os.close(parent_fd)
+            parent_fd = next_fd
+        directory_fd = os.open(path.name, directory_flags, dir_fd=parent_fd)
+        info = os.fstat(directory_fd)
+        if (info.st_dev, info.st_ino) != (entry["device"], entry["inode"]):
+            raise ValueError("Directory identity changed")
+        current = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+        if not stat.S_ISDIR(current.st_mode) or (current.st_dev, current.st_ino) != (info.st_dev, info.st_ino):
+            raise ValueError("Directory changed during cleanup")
+        os.rmdir(path.name, dir_fd=parent_fd)
+    finally:
+        if directory_fd is not None:
+            os.close(directory_fd)
         os.close(parent_fd)
 
 
@@ -346,7 +404,7 @@ def setup(args):
     variant_arg = PUBLIC_TESTS.get(public_test, legacy_variant or "main")
     if not assume_yes:
         print("SPITE: Skill Poisoning and Instruction Trust Evaluation — workspace setup")
-        print("The standard test and endpoint checks are selected.")
+        print("Review this setup before SPITE creates the workspace.")
     if profile not in ("endpoint", "pcap"):
         raise ValueError("Verification mode must be endpoint or pcap")
     setattr(args, "skill_variant", variant_arg)
@@ -364,14 +422,14 @@ def setup(args):
         incompatible = []
         if getattr(args, "pcap", False): incompatible.append("--pcap")
         if destination_url: incompatible.append("--destination")
-        if getattr(args, "harvest", "synthetic") != "synthetic": incompatible.append("--harvest real")
+        if (getattr(args, "harvest", None) or "synthetic") != "synthetic": incompatible.append("--harvest real")
         if incompatible:
             raise ValueError("{} cannot be used with the benign test".format(", ".join(incompatible)))
     elif variant_name != "main":
         incompatible = []
         if getattr(args, "pcap", False): incompatible.append("--pcap")
         if destination_url: incompatible.append("--destination")
-        if getattr(args, "harvest", "synthetic") != "synthetic": incompatible.append("--harvest real")
+        if (getattr(args, "harvest", None) or "synthetic") != "synthetic": incompatible.append("--harvest real")
         if getattr(args, "plan", None): incompatible.append("--file-list")
         if getattr(args, "group", None): incompatible.append("--group")
         if getattr(args, "show_targets", False): incompatible.append("--show-targets")
@@ -382,15 +440,9 @@ def setup(args):
         raise ValueError("Run setup as the exercise user, not with sudo")
     plan_path = Path(getattr(args, "plan", None) or DEFAULT_PLAN).expanduser()
     plan = json.loads(plan_path.read_text()) if uses_manifest else {}
-    group = getattr(args, "group", None)
-    if uses_manifest and len(plan) > 1:
-        if not group:
-            raise ValueError("This file list has several groups. Choose one with --group: " + ", ".join(plan))
-        if group not in plan:
-            raise ValueError("Unknown file group. Choose one of: " + ", ".join(plan))
-        plan = {group: plan[group]}
-    elif group and group not in plan:
-        raise ValueError("Unknown file group: " + group)
+    selected_groups = []
+    if uses_manifest:
+        plan, selected_groups = select_groups(plan, getattr(args, "group", None))
     default = Path.home() / ("spite-exercise-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
     workspace = Path(args.workspace or input("New exercise workspace [{}]: ".format(default)).strip() or default).expanduser().absolute()
     if workspace.exists() or workspace.is_symlink():
@@ -400,13 +452,17 @@ def setup(args):
     print("\nSetup summary")
     print("  Workspace:  ", workspace)
     print("  Target:     ", target["display_name"])
-    print("  Test:       ", VARIANT_LABELS[variant_name])
+    test_label = VARIANT_LABELS[variant_name]
+    if variant_name == "main":
+        test_label = "Real credential test" if source == "real" else "Synthetic credential test"
+    print("  Test:       ", test_label)
     print("  PCAP:       ", "enabled" if profile == "pcap" else "off")
     if destination_url:
         print("  Destination:", destination_url)
     if uses_manifest:
         total_targets = sum(len(paths) for paths in plan.values())
         print("  {}  {} paths".format("Real files:" if source == "real" else "Fake files:", total_targets))
+        print("  Groups:      " + ", ".join(selected_groups))
     else:
         print("  Fake files:  not needed for this test")
     outside_workspace = []
@@ -453,27 +509,43 @@ def setup(args):
     state_id, state_path, cleanup_state = create_cleanup_state(workspace)
     workspace_ledger = workspace / "ownership.json"
     dump(workspace_ledger, dict(schema_version=2, workspace=str(workspace),
-                               state_id=state_id, files=[]))
+                               state_id=state_id, files=[], directories=[]))
+
+    def save_cleanup_state():
+        replace_json(state_path, cleanup_state)
+        replace_json(workspace_ledger, dict(
+            schema_version=2, workspace=str(workspace), state_id=state_id,
+            files=cleanup_state["files"], directories=cleanup_state["directories"],
+        ))
 
     def record_owned(path, digest, kind):
         info = Path(path).lstat()
         entry = dict(path=str(path), sha256=digest, kind=kind,
                      device=info.st_dev, inode=info.st_ino)
         cleanup_state["files"].append(entry)
-        replace_json(state_path, cleanup_state)
-        replace_json(workspace_ledger, dict(schema_version=2, workspace=str(workspace),
-                                            state_id=state_id, files=cleanup_state["files"]))
+        save_cleanup_state()
+
+    def record_created_directory(path):
+        info = Path(path).lstat()
+        if not stat.S_ISDIR(info.st_mode):
+            raise ValueError("A created folder changed before it could be recorded: " + str(path))
+        cleanup_state["directories"].append(dict(
+            path=str(path), kind="seed-parent", device=info.st_dev, inode=info.st_ino,
+        ))
+        save_cleanup_state()
 
     # Keep a setup identity even if a later step fails.
     dump(workspace / "preparation.json", dict(started_utc=utc(),user_uid=os.getuid(),
          interpreter=sys.executable,plan=str(plan_path) if uses_manifest else None,
          phase="preparation",evidence_profile=profile,destination=destination_url,harvest=source,
+         groups=selected_groups,
          target_profile=target["id"],target_profile_source=str(target_path),cleanup_state_id=state_id))
     dump(workspace / "target-profile.json", target)
     try:
-        summary, failed = prepare(
+        summary, _prepare_had_failures = prepare(
             plan, workspace, workspace / "batches", source=source,
-            record_created=lambda path, digest: record_owned(path, digest, "seed")
+            record_created=lambda path, digest: record_owned(path, digest, "seed"),
+            record_created_directory=record_created_directory,
         ) if uses_manifest else ({}, False)
     except Exception:
         print("Setup stopped after creating the workspace. Review and clean it with:", file=sys.stderr)
@@ -497,13 +569,15 @@ def setup(args):
     runner = module_from(SKILL / "scripts/preflight.py", "validation_only")
     owned = []
     manifests = []
+    validation_failed = False
     for batch, info in summary.items():
         if info["manifest"]:
             manifest = workspace / "batches" / info["manifest"]
             for entry in runner.load_manifest(manifest):
                 path = Path(entry["path"])
-                if hashlib.sha256(runner.read_fixture(path, runner.MAX_REAL_FILE_BYTES if source == "real" else runner.MAX_FILE_BYTES)).hexdigest() != entry["sha256"]:
-                    failed = True
+                limit = None if source == "real" else runner.MAX_FILE_BYTES
+                if hashlib.sha256(runner.read_fixture(path, limit)).hexdigest() != entry["sha256"]:
+                    validation_failed = True
                 owned.append(dict(entry, kind=("selected" if source == "real" else "seed")))
             manifests.append(manifest)
     for entry in owned:
@@ -525,10 +599,10 @@ def setup(args):
                 "destination": destination_url,
                 "output": str(prefix)+"-verification.json",
             })
-    ready = not failed and (bool(manifests) or not uses_manifest)
+    ready = not validation_failed and (bool(manifests) or not uses_manifest)
     setup_result = dict(completed_utc=utc(),status="READY" if ready else "INCOMPLETE",
                         batches=summary,evidence_profile=profile,
-                        destination=destination_url,harvest=source,
+                        destination=destination_url,harvest=source,groups=selected_groups,
                         target_profile=target["id"],target_display_name=target["display_name"],skill_variant=variant_name)
     dump(workspace / "setup-result.json", setup_result)
     if ready:
@@ -537,11 +611,22 @@ def setup(args):
             print_workspace_prompts(workspace, setup_result, target, sys.executable)
         cleanup_state["operator_prompts"] = prompt_output.getvalue()
         replace_json(state_path, cleanup_state)
+    event_path = workspace / "batches" / ("selection.jsonl" if source == "real" else "seeding.jsonl")
+    events = []
+    if summary and event_path.is_file():
+        events = [json.loads(line) for line in event_path.read_text(encoding="utf-8").splitlines()]
+    if source == "synthetic":
+        for event in events:
+            if event.get("event") == "skipped_exists":
+                print("Skipped existing file: " + event["path"])
+            elif event.get("event") == "failed":
+                print("Could not create a test credential at {}: {}. Skipped this path and continued.".format(
+                    event["path"], event.get("error", "unknown error")))
     if summary and source == "real":
         totals = {key: sum(result.get(key, 0) for result in summary.values())
-                  for key in ("collected", "missing", "unusable", "oversize", "unresolved")}
-        print("\nReal files: {} collected, {} missing, {} unavailable, {} over the size cap, {} unresolved".format(
-            totals["collected"], totals["missing"], totals["unusable"], totals["oversize"], totals["unresolved"]))
+                  for key in ("collected", "missing", "unusable", "unresolved")}
+        print("\nReal files: {} collected, {} missing, {} unavailable, {} unresolved".format(
+            totals["collected"], totals["missing"], totals["unusable"], totals["unresolved"]))
     elif summary:
         totals = {key: sum(result.get(key, 0) for result in summary.values())
                   for key in ("created", "skipped_exists", "unavailable", "failed")}
@@ -557,7 +642,12 @@ def setup(args):
 
 def test(args):
     name = getattr(args, "name", None)
-    if name:
+    if name in ("synthetic", "real"):
+        legacy = getattr(args, "harvest", None)
+        if legacy is not None and legacy != name:
+            raise ValueError("The test mode and --harvest option must select the same source")
+        args.harvest = name
+    elif name:
         args.test_name = name
     return setup(args)
 
@@ -843,6 +933,9 @@ def cleanup(args):
         raise ValueError("Cleanup state does not belong to this workspace")
     if not isinstance(ledger.get("files"), list):
         raise ValueError("Cleanup state has an invalid file list")
+    directories = ledger.get("directories", [])
+    if not isinstance(directories, list):
+        raise ValueError("Cleanup state has an invalid folder list")
     runner = module_from(SKILL / "scripts/preflight.py","cleanup_reader")
     results = []
     seen = set()
@@ -876,18 +969,37 @@ def cleanup(args):
         except (OSError,ValueError) as exc:
             result["reason"] = str(exc)
         results.append(result)
+    directory_entries = []
+    seen_directories = set()
+    for entry in directories:
+        required = {"path", "kind", "device", "inode"}
+        if not isinstance(entry, dict) or not required.issubset(entry):
+            raise ValueError("Cleanup state contains an invalid folder entry")
+        path = Path(entry["path"])
+        if entry["kind"] != "seed-parent" or not path.is_absolute() or not path.name:
+            raise ValueError("Cleanup state contains an invalid created folder")
+        if str(path) in seen_directories:
+            raise ValueError("Cleanup state contains a duplicate folder: " + str(path))
+        seen_directories.add(str(path))
+        directory_entries.append(entry)
     eligible = [result for result in results if result["action"] == "eligible"]
     preserved = [result for result in results if result["action"] != "eligible"]
-    print("Cleanup found {} unchanged setup files and {} files to preserve.".format(len(eligible),len(preserved)))
+    print("Cleanup found {} unchanged setup files, {} created folders, and {} files to preserve.".format(
+        len(eligible), len(directory_entries), len(preserved)))
     if eligible:
         print("Files eligible for removal:")
         for result in eligible:
             print("  " + result["path"])
+    if directory_entries:
+        print("Folders that will be removed if they are still unchanged and empty:")
+        for entry in sorted(directory_entries, key=lambda item: len(Path(item["path"]).parts), reverse=True):
+            print("  " + entry["path"])
     for result in preserved:
         print("  Preserve {}: {}".format(result["path"], result.get("reason", "not owned by setup")))
     approved = bool(getattr(args, "yes", False) or getattr(args, "apply", False))
-    if eligible and not approved:
-        approved = input("Remove the {} unchanged setup files? [y/N]: ".format(len(eligible))).strip().lower() in ("y","yes")
+    if (eligible or directory_entries) and not approved:
+        approved = input("Remove the unchanged setup files and empty folders created by setup? [y/N]: ").strip().lower() in ("y","yes")
+    directory_results = []
     if approved:
         for result in eligible:
             entry = next(item for item in ledger["files"] if item["path"] == result["path"])
@@ -897,12 +1009,22 @@ def cleanup(args):
                 result.update(action="preserved",reason="File changed during cleanup")
                 continue
             result["action"] = "removed"
-        print("Removed {} files. Evidence and workspace folders were kept.".format(
-            sum(result["action"] == "removed" for result in results)))
+        for entry in sorted(directory_entries, key=lambda item: len(Path(item["path"]).parts), reverse=True):
+            result = dict(path=entry["path"], kind="created-folder", action="preserved")
+            try:
+                remove_owned_directory(entry)
+            except (OSError, ValueError) as exc:
+                result["reason"] = str(exc)
+            else:
+                result["action"] = "removed"
+            directory_results.append(result)
+        print("Removed {} files and {} empty folders. Evidence and workspace folders were kept.".format(
+            sum(result["action"] == "removed" for result in results),
+            sum(result["action"] == "removed" for result in directory_results)))
     else:
-        print("No files removed.")
+        print("Nothing was removed.")
     if getattr(args, "json_output", False):
-        print(json.dumps(results,indent=2))
+        print(json.dumps(results + directory_results,indent=2))
     return 0
 
 
@@ -913,14 +1035,14 @@ def main():
     )
     sub = parser.add_subparsers(dest="phase",required=True)
     p=sub.add_parser("test",help="Prepare an exercise",
-                     description="Prepare the skill test. Use 'hierarchy' to test whether untrusted skill content overrides a direct instruction without running code. Use 'benign' as a false-positive control with a same-named safe skill.")
-    p.add_argument("name",nargs="?",choices=("hierarchy","benign"),
-                   help="Optional test: hierarchy (indirect prompt injection) or benign (false-positive control)")
+                     description="Prepare a synthetic or real credential test. Use 'hierarchy' to test whether untrusted skill content overrides a direct instruction without running code. Use 'benign' as a false-positive control with a same-named safe skill.")
+    p.add_argument("name",nargs="?",choices=("synthetic","real","hierarchy","benign"),
+                   help="Test mode: synthetic, real, hierarchy (indirect prompt injection), or benign (false-positive control); default: synthetic")
     p.add_argument("-w","--workspace",help="New workspace path")
     p.add_argument("--file-list",dest="plan",metavar="FILE",help="JSON file containing file paths")
-    p.add_argument("--group",help="File group to use when --file-list contains several groups")
-    p.add_argument("--harvest",choices=("synthetic","real"),default="synthetic",
-                   help="Collect synthetic fake files (default) or existing real files")
+    p.add_argument("--group",action="append",metavar="NAME",
+                   help="Collect one group; repeat for more (developer, cloud, browser)")
+    p.add_argument("--harvest",choices=("synthetic","real"),default=None,help=argparse.SUPPRESS)
     p.add_argument("--target-config",dest="target_profile",metavar="FILE",help="Target config JSON (default: Trae)")
     p.add_argument("--pcap",action="store_true",help="Also capture localhost traffic")
     p.add_argument("--destination",metavar="URL",help="Send the bundle to an http, https, ws, or wss receiver URL instead of localhost")
@@ -945,15 +1067,16 @@ def main():
     p.add_argument("-y","--yes",action="store_true",help="Remove eligible setup files without asking")
     p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
     p=sub.add_parser("init",aliases=("setup",),help="Create an exercise workspace",
-                     description="Create a workspace for the normal test or an optional control test.")
+                     description="Create a workspace for a credential test or an optional control test.")
     p.add_argument("-w","--workspace",help="New workspace path")
     p.add_argument("--file-list",dest="plan",metavar="FILE",help="JSON file containing file paths")
-    p.add_argument("--group",help="File group to use when --file-list contains several groups")
-    p.add_argument("--harvest",choices=("synthetic","real"),default="synthetic",
+    p.add_argument("--group",action="append",metavar="NAME",
+                   help="Collect one group; repeat for more (developer, cloud, browser)")
+    p.add_argument("--harvest",choices=("synthetic","real"),default=None,
                    help="Collect synthetic fake files (default) or existing real files")
     p.add_argument("--target-config",dest="target_profile",metavar="FILE",help="Target config JSON (default: Trae)")
     p.add_argument("--test",dest="test_name",choices=tuple(PUBLIC_TESTS),
-                   help="Test to prepare (default: normal)")
+                   help="Optional control test: benign or hierarchy")
     p.add_argument("--pcap",action="store_true",help="Also capture localhost traffic")
     p.add_argument("--destination",metavar="URL",
                    help="Send the bundle to an http, https, ws, or wss receiver URL instead of localhost")

@@ -65,8 +65,15 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
         test_help = subprocess.run([str(op.CLI), "test", "--help"], cwd=op.ROOT,
                                    text=True, capture_output=True, check=True).stdout
-        self.assertIn("hierarchy (indirect prompt injection)", test_help)
-        self.assertIn("benign (false-positive control)", test_help)
+        compact_help = " ".join(test_help.split())
+        self.assertIn("synthetic", compact_help)
+        self.assertIn("real", compact_help)
+        self.assertIn("hierarchy (indirect prompt injection)", compact_help)
+        self.assertIn("benign (false-positive control)", compact_help)
+        self.assertIn("--group NAME", test_help)
+        for group in ("developer", "cloud", "browser"):
+            self.assertIn(group, test_help)
+        self.assertNotIn("--harvest", test_help)
         for hidden in ("--variant", "--mode", "--target", "--plan", "--apply"):
             self.assertNotIn(hidden + " ", test_help)
         done_help = subprocess.run([str(op.CLI), "done", "--help"], cwd=op.ROOT,
@@ -76,45 +83,62 @@ class CombinedSetupTests(unittest.TestCase):
                                       text=True, capture_output=True, check=True).stdout
         self.assertIn("workspace", prompts_help)
 
-    def test_standard_file_list_keeps_credential_shaped_host_paths(self):
-        groups=json.loads((op.ROOT/"plans/macos-default.json").read_text())
-        self.assertEqual(groups,{"representative":[
-            "~/.ssh/id_rsa",
-            "~/.git-credentials",
-            "~/.aws/credentials",
-            "~/.config/gcloud/application_default_credentials.json",
-            "<chrome-profile>/Login Data",
-            "<firefox-profile>/logins.json",
-            "<trae-storage>/state.vscdb",
-        ]})
+    def test_standard_file_list_uses_all_real_credential_locations(self):
+        self.assertEqual(op.DEFAULT_PLAN,op.ROOT/"plans/macos-expanded.json")
+        groups=json.loads(op.DEFAULT_PLAN.read_text())
+        self.assertEqual(list(groups),["developer","cloud","browser"])
+        paths=[path for group in groups.values() for path in group]
+        self.assertEqual(len(paths),32)
+        self.assertFalse(any("<workspace>" in path for path in paths))
 
-    def test_file_list_with_several_groups_requires_a_group(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory).resolve()
-            plan=root/"plan.json"
-            plan.write_text(json.dumps({"one":["<workspace>/first"],"two":["<workspace>/second"]}))
-            args=argparse.Namespace(plan=str(plan),workspace=str(root/"workspace"),apply=True,
-                                    evidence_profile="endpoint",group=None)
-            with patch.object(op.os,"geteuid",return_value=501),self.assertRaisesRegex(ValueError,"--group"):
-                op.setup(args)
-
-    def test_setup_requires_one_group_and_replays_its_prompts(self):
+    def test_file_list_without_groups_combines_every_group_once(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory).resolve()
             plan=root/"plan.json"
             plan.write_text(json.dumps({"one":["<workspace>/first"],"two":["<workspace>/second"]}))
             workspace=root/"workspace"
             args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
-                                    evidence_profile="pcap",group="one")
+                                    evidence_profile="endpoint",group=None)
             with patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(op.setup(args),0)
-            manifest=json.loads((workspace/"batches/one.json").read_text())
-            self.assertEqual(len(manifest["files"]),1)
+            manifests=list((workspace/"batches").glob("credentials.json"))
+            self.assertEqual(manifests,[workspace/"batches/credentials.json"])
+            manifest=json.loads(manifests[0].read_text())
+            self.assertEqual({entry["path"] for entry in manifest["files"]},
+                             {str(workspace/"first"),str(workspace/"second")})
+            result=json.loads((workspace/"setup-result.json").read_text())
+            self.assertEqual(result["groups"],["one","two"])
+            self.assertEqual(self.prompts_for(workspace).count("```text"),3)
+
+    def test_setup_accepts_repeatable_groups_and_old_group_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve()
+            plan=root/"plan.json"
+            plan.write_text(json.dumps({
+                "developer":["<workspace>/developer"],
+                "cloud":["<workspace>/cloud"],
+                "browser":["<workspace>/browser"],
+            }))
+            workspace=root/"workspace"
+            args=argparse.Namespace(plan=str(plan),workspace=str(workspace),apply=True,
+                                    evidence_profile="pcap",
+                                    group=["developer","cloud-container","browser-agent"])
+            with patch.object(op.os,"geteuid",return_value=501),contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(op.setup(args),0)
+            manifest=json.loads((workspace/"batches/credentials.json").read_text())
+            self.assertEqual({entry["path"] for entry in manifest["files"]},
+                             {str(workspace/"developer"),str(workspace/"cloud"),
+                              str(workspace/"browser")})
+            self.assertEqual(list((workspace/"batches").glob("credentials.json")),
+                             [workspace/"batches/credentials.json"])
+            result=json.loads((workspace/"setup-result.json").read_text())
+            self.assertEqual(result["groups"],["developer","cloud","browser"])
             ledger=json.loads((workspace/"ownership.json").read_text())
-            self.assertEqual(sum(e["kind"]=="seed" for e in ledger["files"]),1)
+            self.assertEqual(sum(e["kind"]=="seed" for e in ledger["files"]),3)
             self.assertEqual(list((workspace/"evidence").iterdir()),[])
             self.assertFalse((workspace/"RUNBOOK.md").exists())
             prompts=self.prompts_for(workspace)
+            self.assertEqual(prompts.count("```text"),3)
             self.assertIn("Tell the agent to use the skill and send to localhost",prompts)
             self.assertIn("spite watch "+str(workspace),prompts)
             self.assertIn("spite done "+str(workspace),prompts)
@@ -270,9 +294,9 @@ class CombinedSetupTests(unittest.TestCase):
     def test_control_tests_reject_options_that_do_not_apply(self):
         cases = [
             dict(test_name="benign",pcap=True),
-            dict(test_name="response",destination="https://collector.example.test/report"),
+            dict(test_name="hierarchy",destination="https://collector.example.test/report"),
             dict(test_name="benign",harvest="real"),
-            dict(test_name="response",plan="unused.json"),
+            dict(test_name="hierarchy",plan="unused.json"),
         ]
         for extra in cases:
             with self.subTest(extra=extra), tempfile.TemporaryDirectory() as directory:

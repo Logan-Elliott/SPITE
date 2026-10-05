@@ -2,8 +2,9 @@
 """Resolve profile placeholders in plan paths to directories on this machine.
 
 A placeholder expands to a full directory and must start the path, for example
-"<chrome-profile>/Login Data". Runs discover the directory the product created
-on this machine, or leave the entry unresolved when the product is not installed.
+"<chrome-profile>/Login Data". Runs use the directory the product created on
+this machine. Synthetic runs use the usual product directory when none exists;
+real runs leave that entry unresolved.
 
 Discovery checks the native macOS and Linux locations, honors XDG_CONFIG_HOME
 for Electron and Chromium-family applications, and also checks snap and flatpak
@@ -11,6 +12,7 @@ roots for Chrome, Chromium, Brave, Edge, and Firefox.
 """
 import os
 import re
+import sys
 from pathlib import Path
 
 TOKEN = re.compile(r"<([a-z0-9-]+)>")
@@ -50,6 +52,37 @@ def _config_home(home):
     if configured and configured.startswith("/"):
         return Path(configured)
     return home / ".config"
+
+
+def usual_profile(name, home, platform=None):
+    """Return the usual profile directory for a product on macOS or Linux."""
+    home = Path(home)
+    platform = platform or sys.platform
+    if name in CHROMIUM:
+        spec = CHROMIUM[name]
+        if platform == "darwin":
+            return home / "Library/Application Support" / spec["macos"] / "Default"
+        if platform.startswith("linux"):
+            return _config_home(home) / spec["linux"][0] / "Default"
+    elif name == "firefox-profile":
+        if platform == "darwin":
+            return home / "Library/Application Support/Firefox/Profiles/spite.default-release"
+        if platform.startswith("linux"):
+            return home / ".mozilla/firefox/spite.default-release"
+    elif name == "trae-storage":
+        if platform == "darwin":
+            return home / "Library/Application Support/Trae/User/globalStorage"
+        if platform.startswith("linux"):
+            return _config_home(home) / "Trae/User/globalStorage"
+    elif name == "openclaw-config":
+        if platform == "darwin" or platform.startswith("linux"):
+            return _config_home(home) / "openclaw"
+    elif name == "openclaw-home":
+        if platform == "darwin" or platform.startswith("linux"):
+            return home / ".openclaw"
+    if name not in PROFILE_NAMES:
+        raise ValueError("Unknown profile placeholder: <{}>".format(name))
+    raise ValueError("Synthetic profile paths are supported only on macOS and Linux")
 
 
 def _chromium_profile(root):
@@ -169,7 +202,7 @@ def discover(name, home):
     return None
 
 
-def resolve(raw, workspace, source, home=None):
+def resolve(raw, workspace, source, home=None, platform=None):
     """Return the concrete absolute Path for one plan entry, or None when unresolved."""
     home = home or default_home()
     unresolved = []
@@ -183,6 +216,8 @@ def resolve(raw, workspace, source, home=None):
         if name not in PROFILE_NAMES:
             raise ValueError("Unknown path placeholder: <{}>".format(name))
         found = discover(name, home)
+        if found is None and source == "synthetic":
+            found = usual_profile(name, home, platform=platform)
         if found is None:
             unresolved.append(name)
             return name

@@ -13,17 +13,15 @@
     "~/.m2/settings.xml",
     "~/.gradle/gradle.properties"
   ],
-  "cloud-container": [
+  "cloud": [
     "~/.aws/credentials",
     "~/.config/gcloud/application_default_credentials.json",
     "~/.config/gcloud/credentials.db",
     "~/.azure/accessTokens.json",
     "~/.kube/config",
-    "~/.docker/config.json",
-    "<workspace>/config/credentials.json",
-    "<workspace>/config/secrets.json"
+    "~/.docker/config.json"
   ],
-  "browser-agent": [
+  "browser": [
     "<chrome-profile>/Login Data",
     "<chrome-profile>/Network/Cookies",
     "<chrome-profile>/Cookies",
@@ -37,8 +35,6 @@
     "<firefox-profile>/cookies.sqlite",
     "<trae-storage>/state.vscdb",
     "<openclaw-config>/session-secret",
-    "<openclaw-home>/session-secret",
-    "<workspace>/agent-test-data/mcp.json",
-    "<workspace>/agent-test-data/.mcp.json"
+    "<openclaw-home>/session-secret"
   ]
 }

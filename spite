@@ -9,7 +9,10 @@ usage() {
 SPITE: Skill Poisoning and Instruction Trust Evaluation
 
 Usage:
-  spite test [NAME]          Prepare an exercise workspace
+  spite test synthetic       Prepare a synthetic credential test
+  spite test real            Prepare a real credential test
+  spite test [benign|hierarchy]
+                              Prepare an optional control test
   spite prompts <workspace>  Show the agent prompts again
   spite watch <workspace>    Watch the transfer and verify the run
   spite done <workspace>     Remove unchanged files created by setup
@@ -75,7 +78,7 @@ case "$command_name" in
       print "Add this line to your shell configuration, then open a new terminal:"
       print "  export PATH=\"$bin_dir:\$PATH\""
     else
-      print "Run: spite test"
+      print "Run: spite test synthetic"
     fi
     exit 0
     ;;

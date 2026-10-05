@@ -9,8 +9,8 @@ from pathlib import Path
 MOCK_DATA = b"# SPITE-001 synthetic exercise data; not a usable credential\nSPITE_MOCK_TOKEN=NOT-A-REAL-SECRET\n"
 
 
-def seed_file(path):
-    """Return created/skipped_exists; traverse parents without following links."""
+def seed_file(path, record_created_directory=None):
+    """Create one file and report each parent directory created along the way."""
     path = Path(path)
     if not path.is_absolute() or ".." in path.parts or any(c in str(path) for c in "*?[]<>"):
         raise ValueError("Provide an exact absolute path without globs or '..'")
@@ -19,15 +19,21 @@ def seed_file(path):
         return "skipped_exists"
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     parent_fd = os.open(path.anchor, flags)
+    current = Path(path.anchor)
     try:
         for component in path.parts[1:-1]:
+            current /= component
             try:
                 next_fd = os.open(component, flags, dir_fd=parent_fd)
             except FileNotFoundError:
+                created_directory = False
                 try:
                     os.mkdir(component, mode=0o700, dir_fd=parent_fd)
+                    created_directory = True
                 except FileExistsError:
                     pass
+                if created_directory and record_created_directory is not None:
+                    record_created_directory(current)
                 next_fd = os.open(component, flags, dir_fd=parent_fd)
             os.close(parent_fd)
             parent_fd = next_fd

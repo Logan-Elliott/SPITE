@@ -24,6 +24,29 @@ class SeederTests(unittest.TestCase):
         self.assertEqual(target.stat().st_mode & 0o777, 0o600)
         self.assertEqual(target.parent.stat().st_mode & 0o777, 0o700)
 
+    def test_reports_each_directory_it_creates_in_order(self):
+        existing = self.root / "existing"
+        existing.mkdir()
+        target = existing / "first/second/credential"
+        created = []
+        self.assertEqual(seeder.seed_file(target, record_created_directory=created.append), "created")
+        self.assertEqual(created, [existing / "first", existing / "first/second"])
+
+    def test_reports_created_directories_before_a_later_failure(self):
+        target = self.root / "first/second/credential"
+        created = []
+        original_open = os.open
+
+        def fail_after_second_directory_is_created(path, flags, *args, **kwargs):
+            if path == "second" and (self.root / "first/second").is_dir():
+                raise PermissionError("blocked after mkdir")
+            return original_open(path, flags, *args, **kwargs)
+
+        with patch.object(seeder.os, "open", side_effect=fail_after_second_directory_is_created), \
+             self.assertRaises(PermissionError):
+            seeder.seed_file(target, record_created_directory=created.append)
+        self.assertEqual(created, [self.root / "first", self.root / "first/second"])
+
     def test_existing_content_and_metadata_untouched(self):
         target = self.root / "existing"
         target.write_bytes(b"existing credential")

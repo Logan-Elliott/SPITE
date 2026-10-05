@@ -20,7 +20,8 @@ def load_runner():
     return module
 
 
-def prepare(plan, workspace, output, source="synthetic", record_created=None):
+def prepare(plan, workspace, output, source="synthetic", record_created=None,
+            record_created_directory=None):
     if source not in ("synthetic", "real"):
         raise ValueError("Harvest source must be synthetic or real")
     workspace = Path(workspace).resolve(strict=True)
@@ -55,8 +56,7 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None):
         for batch, targets in expanded.items():
             entries = []
             if source == "real":
-                counts = dict(collected=0, missing=0, unusable=0, oversize=0, unresolved=0)
-                total_bytes = 0
+                counts = dict(collected=0, missing=0, unusable=0, unresolved=0)
                 for raw, path in targets:
                     record = dict(phase="pre-exercise-selection", batch=batch,
                                   path=str(path) if path is not None else raw,
@@ -65,19 +65,15 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None):
                         event = "unresolved"
                     else:
                         try:
-                            content = runner.read_fixture(path, runner.MAX_REAL_FILE_BYTES)
+                            content = runner.read_fixture(path, None)
                         except FileNotFoundError:
                             event = "missing"
                         except (OSError, ValueError) as exc:
                             event = "unusable"
                             record["error"] = str(exc)
                         else:
-                            if total_bytes + len(content) > runner.MAX_HARVEST_BYTES:
-                                event = "oversize"
-                            else:
-                                total_bytes += len(content)
-                                entries.append(dict(path=str(path), sha256=hashlib.sha256(content).hexdigest()))
-                                event = "collected"
+                            entries.append(dict(path=str(path), sha256=hashlib.sha256(content).hexdigest()))
+                            event = "collected"
                     record["event"] = event
                     counts[event] += 1
                     log.write(json.dumps(record) + "\n")
@@ -92,7 +88,7 @@ def prepare(plan, workspace, output, source="synthetic", record_created=None):
                         event = "unavailable"
                     else:
                         try:
-                            event = seed_file(path)
+                            event = seed_file(path, record_created_directory=record_created_directory)
                         except (OSError, ValueError) as exc:
                             event = "failed"
                             record["error"] = str(exc)

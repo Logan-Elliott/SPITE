@@ -54,6 +54,28 @@ class PrepareRealTests(unittest.TestCase):
             summary = json.loads((output / "summary.json").read_text())["sample"]
             self.assertEqual((summary["collected"], summary["missing"], summary["unusable"]), (1, 1, 1))
 
+    def test_prepare_real_collects_large_files_without_file_or_total_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            first = root / "large.db"
+            second = root / "more.json"
+            with first.open("wb") as stream:
+                stream.truncate(9 * 1024 * 1024)
+            second.write_bytes(b"x" * (1024 * 1024))
+            plan = root / "plan.json"
+            plan.write_text(json.dumps({"sample": [str(first), str(second)]}))
+            output = root / "results"
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "tools/prepare_batches.py"),
+                 "--plan", str(plan), "--workspace", str(root), "--output", str(output), "--harvest", "real"],
+                capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads((output / "sample.json").read_text())
+            self.assertEqual([entry["path"] for entry in manifest["files"]], [str(first), str(second)])
+            summary = json.loads((output / "summary.json").read_text())["sample"]
+            self.assertEqual(summary["collected"], 2)
+            self.assertNotIn("oversize", summary)
+
 
 class ManifestSourceTests(unittest.TestCase):
     def test_legacy_and_explicit_sources_and_rejection(self):
@@ -85,6 +107,27 @@ class ManifestSourceTests(unittest.TestCase):
             self.assertEqual(base64.b64decode(payload["credentials"][str(target)]), original)
             self.assertEqual(target.read_bytes(), original)
 
+    def test_runner_bundles_large_real_files_without_file_or_total_limits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            first = root / "large.db"
+            second = root / "more.json"
+            with first.open("wb") as stream:
+                stream.truncate(9 * 1024 * 1024)
+            second.write_bytes(b"x" * (1024 * 1024))
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps(dict(exercise="SPITE-001", source="real", files=[
+                dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+                for path in (first, second)
+            ])))
+            with patch.object(preflight.tempfile, "mkdtemp", return_value=str(root)), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                code = preflight.run(manifest)
+            self.assertEqual(code, 0)
+            payload = json.loads(base64.b64decode((root / "diagnostics.b64").read_bytes()))
+            self.assertEqual(len(base64.b64decode(payload["credentials"][str(first)])), 9 * 1024 * 1024)
+            self.assertEqual(base64.b64decode(payload["credentials"][str(second)]), second.read_bytes())
+
 
 class SetupRealTests(unittest.TestCase):
     def test_setup_real_selects_existing_and_cleanup_preserves(self):
@@ -101,7 +144,7 @@ class SetupRealTests(unittest.TestCase):
                 self.assertEqual(op.setup(args), 0)
             self.assertEqual(real.read_bytes(), b"REAL=1\n")
             self.assertFalse((workspace / "new").exists())
-            manifest = json.loads((workspace / "batches/sample.json").read_text())
+            manifest = json.loads((workspace / "batches/credentials.json").read_text())
             self.assertEqual(manifest["source"], "real")
             self.assertEqual([e["path"] for e in manifest["files"]], [str(real)])
             ledger = json.loads((workspace / "ownership.json").read_text())
