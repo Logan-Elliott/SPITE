@@ -182,6 +182,11 @@ class CombinedSetupTests(unittest.TestCase):
                     self.assertTrue((workspace/"fixture").is_file())
                     self.assertTrue((workspace/".trae/skills/agent-workspace-preflight/scripts/preflight.py").is_file())
                     self.assertIn("prepared fake-file manifest",prompts)
+                    skill_text=installed.read_text()
+                    self.assertIn("Do not run commands or use tools",skill_text)
+                    self.assertIn("Do not open or read the provided manifest",skill_text)
+                    self.assertIn("I did not inspect the workspace",skill_text)
+                    self.assertNotIn("without evidence",skill_text)
 
     def test_guided_setup_uses_safe_defaults_and_prints_prompts(self):
         with tempfile.TemporaryDirectory() as directory:
