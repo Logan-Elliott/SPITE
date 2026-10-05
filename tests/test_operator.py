@@ -332,11 +332,12 @@ class ThreeCommandSetupTests(unittest.TestCase):
 
         captured = []
         argv = ["exercise_ops.py", "test", "synthetic",
-                "--group", "developer", "--group", "cloud"]
+                "--group", "developer", "--group", "cloud-container",
+                "--group", "browser-agent"]
         with patch.object(sys, "argv", argv), \
              patch.object(op, "setup", side_effect=lambda args: captured.append(args) or 0):
             self.assertEqual(op.main(), 0)
-        self.assertEqual(captured[0].group, ["developer", "cloud"])
+        self.assertEqual(captured[0].group, ["developer", "cloud-container", "browser-agent"])
 
         with patch.object(sys, "argv", ["exercise_ops.py", "test", "synthetic",
                                         "--harvest", "real"]), \
@@ -505,32 +506,31 @@ class ThreeCommandSetupTests(unittest.TestCase):
                 self.assertIn("Expected:", replay.getvalue())
                 self.assertIn("Next command: spite done " + str(workspace), replay.getvalue())
 
-    def test_legacy_init_prints_prompts_without_a_runbook(self):
-        cases = (
-            (None, "main", "Step 1 — Let the agent pick the skill", "watch"),
-            ("hierarchy", "answer-contamination", "Expected: exactly READY", "done"),
-            ("benign", "benign-control", "Expected: a short readiness explanation", "done"),
+    def test_removed_commands_and_test_options_are_rejected(self):
+        removed_commands = ("init", "setup", "clean", "cleanup", "receiver")
+        removed_test_options = (
+            ("--test", "benign"),
+            ("--plan", "plan.json"),
+            ("--target", "target.json"),
+            ("--target-profile", "target.json"),
+            ("--variant", "main"),
+            ("--skill-variant", "main"),
+            ("--mode", "endpoint"),
+            ("--evidence-profile", "endpoint"),
+            ("--apply",),
         )
-        for name, variant, marker, next_command in cases:
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary).resolve()
-                plan = root / "plan.json"
-                plan.write_text(json.dumps({"sample": ["<workspace>/fake.env"]}))
-                workspace = root / "workspace"
-                output = io.StringIO()
-                argv = ["exercise_ops.py", "init", "--workspace", str(workspace), "--yes"]
-                if name:
-                    argv.extend(["--test", name])
-                if name != "hierarchy":
-                    argv.extend(["--file-list", str(plan)])
-                with patch.object(sys, "argv", argv), patch.object(op.os, "geteuid", return_value=501), \
-                     contextlib.redirect_stdout(output):
-                    self.assertEqual(op.main(), 0)
-                self.assertEqual(json.loads((workspace / "setup-result.json").read_text())["skill_variant"], variant)
-                self.assertIn(marker, output.getvalue())
-                self.assertIn("```text", output.getvalue())
-                self.assertIn("Next command: spite " + next_command + " " + str(workspace), output.getvalue())
-                self.assertFalse((workspace / "RUNBOOK.md").exists())
+        cases = [["exercise_ops.py", command] for command in removed_commands]
+        cases.extend(
+            ["exercise_ops.py", "test", "synthetic", *option]
+            for option in removed_test_options
+        )
+        cases.append(["exercise_ops.py", "done", "workspace", "--apply"])
+
+        for argv in cases:
+            with self.subTest(argv=argv), patch.object(sys, "argv", argv), \
+                 contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+                op.main()
+            self.assertEqual(raised.exception.code, 2)
 
     def test_prompts_replay_saved_text_after_workspace_metadata_changes(self):
         with tempfile.TemporaryDirectory() as temporary:

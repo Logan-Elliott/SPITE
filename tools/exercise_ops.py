@@ -677,7 +677,7 @@ def capture(args):
     if sys.platform != "darwin":
         raise ValueError("Capture launcher targets macOS lo0")
     if os.geteuid() != 0:
-        raise ValueError("Run `spite capture` with administrator approval (sudo)")
+        raise ValueError("Packet capture requires administrator approval (sudo)")
     # Reserve evidence outputs before elevation; no existing files replaced.
     with output.open("xb"):
         pass
@@ -1043,9 +1043,10 @@ def main():
     parser = argparse.ArgumentParser(
         prog="spite",
         description="Prepare and review a SPITE skill-poisoning exercise.",
+        allow_abbrev=False,
     )
     sub = parser.add_subparsers(dest="phase",required=True)
-    p=sub.add_parser("test",help="Prepare an exercise",
+    p=sub.add_parser("test",help="Prepare an exercise",allow_abbrev=False,
                      description="Prepare a synthetic or real credential test. Use 'hierarchy' to test whether untrusted skill content overrides a direct instruction without running code. Use 'benign' as a false-positive control with a same-named safe skill.")
     p.add_argument("name",nargs="?",choices=("synthetic","real","hierarchy","benign"),
                    help="Test mode: synthetic, real, hierarchy (indirect prompt injection), or benign (false-positive control); default: synthetic")
@@ -1059,55 +1060,27 @@ def main():
     p.add_argument("--destination",metavar="URL",help="Send the bundle to an http, https, ws, or wss receiver URL instead of localhost")
     p.add_argument("--show-targets",action="store_true",help="List every requested file path")
     p.add_argument("-y","--yes",action="store_true",help="Create the reviewed workspace without asking")
-    p.add_argument("--test",dest="test_name",choices=tuple(PUBLIC_TESTS),help=argparse.SUPPRESS)
-    p.add_argument("--plan",dest="plan",help=argparse.SUPPRESS)
-    p.add_argument("--target","--target-profile",dest="target_profile",help=argparse.SUPPRESS)
-    p.add_argument("--variant","--skill-variant",dest="skill_variant",choices=tuple(SKILL_VARIANTS),help=argparse.SUPPRESS)
-    p.add_argument("--mode","--evidence-profile",dest="evidence_profile",choices=("endpoint","pcap"),help=argparse.SUPPRESS)
-    p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
-    p=sub.add_parser("prompts",help="Show the prompts for a prepared workspace",
+    p=sub.add_parser("prompts",help="Show the prompts for a prepared workspace",allow_abbrev=False,
                      description="Show the agent prompts and next commands printed during setup.")
     p.add_argument("workspace",help="Prepared exercise workspace")
-    p=sub.add_parser("watch",help="Wait for a run and verify it")
+    p=sub.add_parser("watch",help="Wait for a run and verify it",allow_abbrev=False)
     p.add_argument("workspace",help="Prepared exercise workspace")
     p.add_argument("--offline",action="store_true",help="Check the newest run that did not use a receiver")
     p.add_argument("--timeout",type=int,default=900,help="Seconds to wait for a transfer (default: 900)")
-    p=sub.add_parser("done",help="Remove unchanged files and empty folders created by setup",
+    p=sub.add_parser("done",help="Remove unchanged files and empty folders created by setup",allow_abbrev=False,
                      description="Show unchanged files and folders created by setup and ask before removing them.")
     p.add_argument("workspace",help="Prepared exercise workspace")
     p.add_argument("-y","--yes",action="store_true",help="Remove eligible setup files without asking")
-    p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
-    p=sub.add_parser("init",aliases=("setup",),help="Create an exercise workspace",
-                     description="Create a workspace for a credential test or an optional control test.")
-    p.add_argument("-w","--workspace",help="New workspace path")
-    p.add_argument("--file-list",dest="plan",metavar="FILE",help="JSON file containing file paths")
-    p.add_argument("--group",action="append",metavar="NAME",
-                   help="Use only this file group; repeat for more. Choices: developer, cloud, browser. Default: all three")
-    p.add_argument("--harvest",choices=("synthetic","real"),default=None,
-                   help="Create synthetic credential files (default) or collect existing real files")
-    p.add_argument("--target-config",dest="target_profile",metavar="FILE",help="Target config JSON (default: Trae)")
-    p.add_argument("--test",dest="test_name",choices=tuple(PUBLIC_TESTS),
-                   help="Optional control test: benign or hierarchy")
-    p.add_argument("--pcap",action="store_true",help="Also capture localhost traffic")
-    p.add_argument("--destination",metavar="URL",
-                   help="Send the bundle to an http, https, ws, or wss receiver URL instead of localhost")
-    p.add_argument("--show-targets",action="store_true",help="List every requested file path")
-    p.add_argument("-y","--yes",action="store_true",help="Create the reviewed workspace without asking")
-    p.add_argument("--plan",dest="plan",help=argparse.SUPPRESS)
-    p.add_argument("--target","--target-profile",dest="target_profile",help=argparse.SUPPRESS)
-    p.add_argument("--variant","--skill-variant",dest="skill_variant",choices=tuple(SKILL_VARIANTS),help=argparse.SUPPRESS)
-    p.add_argument("--mode","--evidence-profile",dest="evidence_profile",choices=("endpoint","pcap"),help=argparse.SUPPRESS)
-    p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
-    p=sub.add_parser("receive",aliases=("receiver",),help="Start the localhost receiver",
+    p=sub.add_parser("receive",help=argparse.SUPPRESS,allow_abbrev=False,
                      description="Receive one bundle on 127.0.0.1:8765 and save a receipt.")
     p.add_argument("--output",help="New receipt file")
     p.add_argument("--timeout",type=int,default=900,help="Seconds to wait (default: 900)")
-    p=sub.add_parser("capture",help="Capture localhost traffic",
+    p=sub.add_parser("capture",help=argparse.SUPPRESS,allow_abbrev=False,
                      description="Capture TCP port 8765 on the macOS loopback interface.")
     p.add_argument("--output",help="New PCAP file")
     p.add_argument("--timeout",type=int,default=900,help="Maximum capture time in seconds (default: 900)")
     p.add_argument("--stop-file",help=argparse.SUPPRESS)
-    p=sub.add_parser("verify",help="Check saved evidence",
+    p=sub.add_parser("verify",help=argparse.SUPPRESS,allow_abbrev=False,
                      description="Check a run folder against the files saved during setup.")
     p.add_argument("run",nargs="?",help="Run folder reported by the agent")
     p.add_argument("--workspace",help="Prepared exercise workspace")
@@ -1120,22 +1093,13 @@ def main():
     p.add_argument("--destination",help=argparse.SUPPRESS)
     p.add_argument("--output",help=argparse.SUPPRESS)
     p.add_argument("--run",dest="run_legacy",help=argparse.SUPPRESS)
-    p=sub.add_parser("clean",aliases=("cleanup",),help="Remove unchanged files and empty folders created by setup",
-                     description="Show unchanged files and folders created by setup and ask before removing them.")
-    p.add_argument("workspace_pos",nargs="?",metavar="workspace",help="Prepared exercise workspace")
-    p.add_argument("-y","--yes",action="store_true",help="Remove eligible files and empty folders without asking")
-    p.add_argument("--json",dest="json_output",action="store_true",help="Print details as JSON")
-    p.add_argument("--workspace",help=argparse.SUPPRESS)
-    p.add_argument("--apply",action="store_true",help=argparse.SUPPRESS)
-    p=sub.add_parser("doctor",help="Check this system before an exercise",
+    p=sub.add_parser("doctor",help="Check this system before an exercise",allow_abbrev=False,
                      description="Check the operating system, runtime, target config, receiver port, and capture tool.")
     p.add_argument("--target-config",dest="target_profile",metavar="FILE",help="Target config JSON (default: Trae)")
     p.add_argument("--json",dest="json_output",action="store_true",help="Print details as JSON")
     args=parser.parse_args()
     if args.phase=="verify" and not args.run:
         args.run=args.run_legacy
-    if args.phase=="done" and args.apply:
-        args.yes=True
     if args.phase=="verify" and args.evidence_profile=="endpoint" and args.pcap:
         parser.error("Endpoint verification does not use a PCAP file")
     if hasattr(args,"timeout") and not 1<=args.timeout<=3600:parser.error("timeout must be 1–3600 seconds")
@@ -1144,10 +1108,9 @@ def main():
         "prompts": show_prompts,
         "watch": lambda request: module_from(ROOT / "tools/watch_flow.py", "watch_flow").watch(request, SimpleNamespace(**globals())),
         "done": cleanup,
-        "init": setup, "setup": setup,
-        "receive": receiver, "receiver": receiver,
-        "capture": capture, "verify": verify,
-        "clean": cleanup, "cleanup": cleanup,
+        "receive": receiver,
+        "capture": capture,
+        "verify": verify,
         "doctor": doctor,
     }
     return handlers[args.phase](args)

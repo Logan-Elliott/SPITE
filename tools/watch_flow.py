@@ -303,7 +303,7 @@ def watch(args, ops):
             if saved.get("mode") == "pcap":
                 pcap = _unused_path(saved["pcap"])
                 capture_stop = _unused_path(Path(str(pcap) + ".stop"))
-                capture = _start([str(ops.CLI), "capture", "--output", str(pcap),
+                capture = _start([str(ops.ROOT / "macos/launch.sh"), "capture", "--output", str(pcap),
                                   "--timeout", str(timeout), "--stop-file", str(capture_stop)],
                                  "PCAP", timeout)
             receipt = _unused_path(saved["receipt"])

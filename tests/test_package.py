@@ -52,17 +52,18 @@ class CombinedSetupTests(unittest.TestCase):
             self.assertEqual(op.main(),0)
         return output.getvalue()
 
-    def test_main_help_shows_three_commands_and_keeps_advanced_aliases(self):
+    def test_public_cli_shows_current_commands_and_rejects_removed_syntax(self):
         help_text = subprocess.run([str(op.CLI), "help"], cwd=op.ROOT,
                                    text=True, capture_output=True, check=True).stdout
         for name in ("test", "watch", "done", "prompts", "doctor", "install", "update",
                      "uninstall", "version", "help"):
             self.assertIn("spite " + name, help_text)
-        for name in ("init", "receive", "verify", "capture", "clean"):
+        for name in ("init", "setup", "receive", "receiver", "verify", "clean", "cleanup", "capture"):
             self.assertNotIn("spite " + name, help_text)
+        for name in ("init", "setup", "receive", "receiver", "verify", "clean", "cleanup", "capture"):
             result = subprocess.run([str(op.CLI), name, "--help"], cwd=op.ROOT,
                                     text=True, capture_output=True)
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.returncode, 2, result.stderr)
         test_help = subprocess.run([str(op.CLI), "test", "--help"], cwd=op.ROOT,
                                    text=True, capture_output=True, check=True).stdout
         compact_help = " ".join(test_help.split())
@@ -74,8 +75,16 @@ class CombinedSetupTests(unittest.TestCase):
         for group in ("developer", "cloud", "browser"):
             self.assertIn(group, test_help)
         self.assertNotIn("--harvest", test_help)
-        for hidden in ("--variant", "--mode", "--target", "--plan", "--apply"):
+        for hidden in ("--test", "--plan", "--target", "--target-profile", "--variant",
+                       "--skill-variant", "--mode", "--evidence-profile", "--apply"):
             self.assertNotIn(hidden + " ", test_help)
+            arguments = [hidden] if hidden == "--apply" else [hidden, "unused"]
+            result = subprocess.run([str(op.CLI), "test", "synthetic", *arguments], cwd=op.ROOT,
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 2, result.stderr)
+        removed_done = subprocess.run([str(op.CLI), "done", "unused", "--apply"], cwd=op.ROOT,
+                                      text=True, capture_output=True)
+        self.assertEqual(removed_done.returncode, 2, removed_done.stderr)
         done_help = subprocess.run([str(op.CLI), "done", "--help"], cwd=op.ROOT,
                                    text=True, capture_output=True, check=True).stdout
         self.assertNotIn("--set", done_help)
@@ -254,8 +263,8 @@ class CombinedSetupTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 op.load_target_profile(profile)
 
-    def test_capture_help_does_not_request_sudo(self):
-        result=subprocess.run([str(op.CLI),"capture","--help"],cwd=op.ROOT,
+    def test_internal_capture_help_does_not_request_sudo(self):
+        result=subprocess.run([str(op.ROOT/"macos/launch.sh"),"capture","--help"],cwd=op.ROOT,
                               text=True,capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn("Capture TCP port 8765",result.stdout)

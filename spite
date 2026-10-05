@@ -37,11 +37,6 @@ case "$command_name" in
   prompts) phase=prompts ;;
   watch) phase=watch ;;
   done) phase=done ;;
-  init|setup) phase=init ;;
-  receive|receiver) phase=receive ;;
-  verify) phase=verify ;;
-  capture) phase=capture ;;
-  clean|cleanup) phase=clean ;;
   doctor) phase=doctor ;;
   install|update)
     bin_dir="${SPITE_BIN_DIR:-$HOME/.local/bin}"
