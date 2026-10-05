@@ -202,6 +202,27 @@ class DiscoverTests(EnvClean):
             self.assertEqual([path for path, _ in opened], [ini])
             self.assertTrue(opened[0][1] & os.O_NOFOLLOW)
 
+    def test_firefox_ignores_a_fifo_profiles_ini_without_blocking(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            root = home / ".mozilla/firefox"
+            fallback = root / "Profiles/abc123.default-release"
+            fallback.mkdir(parents=True)
+            ini = root / "profiles.ini"
+            os.mkfifo(ini)
+
+            original_open = os.open
+
+            def require_nonblocking_open(path, flags, *args, **kwargs):
+                if Path(path) == ini:
+                    self.assertTrue(flags & os.O_NONBLOCK)
+                return original_open(path, flags, *args, **kwargs)
+
+            with patch.object(profile_paths.os, "open", side_effect=require_nonblocking_open):
+                found = profile_paths.discover("firefox-profile", home)
+
+            self.assertEqual(found, fallback)
+
     def test_firefox_reads_a_snap_profile_without_ini(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()
