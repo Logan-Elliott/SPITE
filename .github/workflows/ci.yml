@@ -71,7 +71,7 @@ jobs:
           grep -Fq 'Let the agent pick the skill' "$smoke_root/prompts.txt"
           grep -Fq 'Tell the agent to use the skill' "$smoke_root/prompts.txt"
           runner="$workspace/.trae/skills/agent-workspace-preflight/scripts/preflight.py"
-          manifest="$workspace/batches/ci.json"
+          manifest="$workspace/batches/credentials.json"
           python3 "$runner" --manifest "$manifest" > "$smoke_root/offline-run.log"
           "$cli" watch "$workspace" --offline | tee "$smoke_root/offline-watch.log"
           grep -Fq 'SPITE verification: VERIFIED' "$smoke_root/offline-watch.log"
