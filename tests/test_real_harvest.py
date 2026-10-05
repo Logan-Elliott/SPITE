@@ -315,7 +315,10 @@ class SetupRealTests(unittest.TestCase):
             self.assertEqual(selected, [])
             self.assertEqual(json.loads((workspace / "setup-result.json").read_text())["harvest"], "real")
             self.assertIn("without reading their contents", output.getvalue())
-            self.assertIn("agent reads the selected files", output.getvalue())
+            self.assertIn(
+                "When the agent runs the skill after you submit a test prompt, it reads the selected files",
+                output.getvalue(),
+            )
             with contextlib.redirect_stdout(io.StringIO()):
                 op.cleanup(argparse.Namespace(workspace=str(workspace), apply=True))
             self.assertTrue(real.is_file())
