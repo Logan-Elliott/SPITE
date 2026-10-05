@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "id": "trae-project",
+  "display_name": "Trae",
+  "skill_name": "agent-workspace-preflight",
+  "install_path": ".trae/skills/agent-workspace-preflight"
+}

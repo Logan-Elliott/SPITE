@@ -1,0 +1,114 @@
+#!/bin/zsh
+set -eu
+
+script_path="${0:A}"
+package_root="${script_path:h}"
+
+usage() {
+  cat <<'EOF'
+SPITE: Skill Poisoning and Instruction Trust Evaluation
+
+Usage:
+  spite test synthetic       Prepare a synthetic credential test
+  spite test real            Prepare a real credential test
+  spite test [benign|hierarchy]
+                              Prepare an optional control test
+  spite prompts <workspace>  Show the agent prompts again
+  spite watch <workspace>    Watch the transfer and verify the run
+  spite done <workspace>     Remove unchanged files and empty folders created by setup
+  spite doctor               Check this system before an exercise
+  spite install              Install this package in ~/.local
+  spite update               Update the command from this package
+  spite uninstall            Remove the installed command
+  spite version              Print the installed version
+  spite help                 Show this help
+
+Run `spite COMMAND --help` for command-specific options.
+EOF
+}
+
+command_name="${1:-help}"
+if (( $# > 0 )); then
+  shift
+fi
+
+case "$command_name" in
+  test) phase=test ;;
+  prompts) phase=prompts ;;
+  watch) phase=watch ;;
+  done) phase=done ;;
+  init|setup) phase=init ;;
+  receive|receiver) phase=receive ;;
+  verify) phase=verify ;;
+  capture) phase=capture ;;
+  clean|cleanup) phase=clean ;;
+  doctor) phase=doctor ;;
+  install|update)
+    bin_dir="${SPITE_BIN_DIR:-$HOME/.local/bin}"
+    lib_dir="${SPITE_LIB_DIR:-$HOME/.local/lib/spite}"
+    version="$(<"$package_root/VERSION")"
+    install_root="$lib_dir/$version"
+    target="$bin_dir/spite"
+    mkdir -p "$bin_dir" "$lib_dir"
+    if [[ ! -d "$install_root" ]]; then
+      staging="$lib_dir/.install-$version-$$"
+      mkdir "$staging"
+      for item in spite VERSION macos tools skills variants profiles plans; do
+        cp -R "$package_root/$item" "$staging/$item"
+      done
+      mv "$staging" "$install_root"
+    fi
+    if [[ -e "$target" || -L "$target" ]]; then
+      if [[ "${target:A}" == "$install_root/spite" ]]; then
+        print "Already installed: $target"
+        exit 0
+      fi
+      if [[ -L "$target" && "${target:A}" == "$lib_dir"/*/spite ]]; then
+        ln -sfn "$install_root/spite" "$target"
+        print "Updated: $target -> $install_root/spite"
+      else
+        print -u2 "Refusing to replace existing path: $target"
+        exit 1
+      fi
+    else
+      ln -s "$install_root/spite" "$target"
+      print "Installed: $target -> $install_root/spite"
+    fi
+    if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
+      print "Add this line to your shell configuration, then open a new terminal:"
+      print "  export PATH=\"$bin_dir:\$PATH\""
+    else
+      print "Run: spite test synthetic"
+    fi
+    exit 0
+    ;;
+  uninstall)
+    bin_dir="${SPITE_BIN_DIR:-$HOME/.local/bin}"
+    lib_dir="${SPITE_LIB_DIR:-$HOME/.local/lib/spite}"
+    target="$bin_dir/spite"
+    if [[ ! -L "$target" || "${target:A}" != "$lib_dir"/*/spite ]]; then
+      print -u2 "No SPITE-managed command found at: $target"
+      exit 1
+    fi
+    installed_root="${target:A:h}"
+    unlink "$target"
+    print "Removed command: $target"
+    print "Saved package kept at: $installed_root"
+    exit 0
+    ;;
+  version)
+    cat "$package_root/VERSION"
+    exit 0
+    ;;
+  help|-h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    print -u2 "Unknown command: $command_name"
+    usage >&2
+    exit 2
+    ;;
+esac
+
+exec /bin/zsh "$package_root/macos/launch.sh" "$phase" "$@"

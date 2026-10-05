@@ -24,6 +24,58 @@ class SeederTests(unittest.TestCase):
         self.assertEqual(target.stat().st_mode & 0o777, 0o600)
         self.assertEqual(target.parent.stat().st_mode & 0o777, 0o700)
 
+    def test_reports_each_directory_it_creates_in_order(self):
+        existing = self.root / "existing"
+        existing.mkdir()
+        target = existing / "first/second/credential"
+        created = []
+        recorder = lambda path, _device, _inode: created.append(path)
+        self.assertEqual(seeder.seed_file(target, record_created_directory=recorder), "created")
+        self.assertEqual(created, [existing / "first", existing / "first/second"])
+
+    def test_reports_created_directories_before_a_later_failure(self):
+        target = self.root / "first/second/credential"
+        created = []
+        original_open = os.open
+
+        def fail_after_second_directory_is_created(path, flags, *args, **kwargs):
+            if path == "second" and (self.root / "first/second").is_dir():
+                raise PermissionError("blocked after mkdir")
+            return original_open(path, flags, *args, **kwargs)
+
+        with patch.object(seeder.os, "open", side_effect=fail_after_second_directory_is_created), \
+             self.assertRaises(PermissionError):
+            seeder.seed_file(target, record_created_directory=lambda path, _device, _inode: created.append(path))
+        self.assertEqual(created, [self.root / "first", self.root / "first/second"])
+
+    def test_write_failure_removes_the_file_it_created(self):
+        target = self.root / "credential"
+        with patch.object(seeder.os, "write", side_effect=OSError("disk write failed")), \
+             self.assertRaisesRegex(OSError, "disk write failed"):
+            seeder.seed_file(target)
+        self.assertFalse(target.exists())
+
+    def test_file_tracking_failure_removes_the_file_and_stops_setup(self):
+        target = self.root / "credential"
+
+        def fail_tracking(_path, _device, _inode):
+            raise OSError("state unavailable")
+
+        with self.assertRaisesRegex(seeder.CleanupStateError, "created file"):
+            seeder.seed_file(target, record_created_file=fail_tracking)
+        self.assertFalse(target.exists())
+
+    def test_folder_tracking_failure_removes_the_new_empty_folder(self):
+        target = self.root / "new/credential"
+
+        def fail_tracking(_path, _device, _inode):
+            raise OSError("state unavailable")
+
+        with self.assertRaisesRegex(seeder.CleanupStateError, "created folder"):
+            seeder.seed_file(target, record_created_directory=fail_tracking)
+        self.assertFalse((self.root / "new").exists())
+        self.assertFalse(target.exists())
+
     def test_existing_content_and_metadata_untouched(self):
         target = self.root / "existing"
         target.write_bytes(b"existing credential")

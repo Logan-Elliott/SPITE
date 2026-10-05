@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible problem without including credentials or engagement data
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach credentials, receiver payloads, PCAPs, or private endpoint records.
+  - type: input
+    id: version
+    attributes:
+      label: SPITE version
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: OS (macOS or Linux distribution), Python, and target agent versions
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce with synthetic data
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true

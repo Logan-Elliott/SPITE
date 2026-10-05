@@ -13,28 +13,28 @@
     "~/.m2/settings.xml",
     "~/.gradle/gradle.properties"
   ],
-  "cloud-container": [
+  "cloud": [
     "~/.aws/credentials",
     "~/.config/gcloud/application_default_credentials.json",
     "~/.config/gcloud/credentials.db",
     "~/.azure/accessTokens.json",
     "~/.kube/config",
-    "~/.docker/config.json",
-    "<workspace>/config/credentials.json",
-    "<workspace>/config/secrets.json"
+    "~/.docker/config.json"
   ],
-  "browser-agent": [
-    "~/Library/Application Support/Google/Chrome/PurpleTeam/Login Data",
-    "~/Library/Application Support/Google/Chrome/PurpleTeam/Network/Cookies",
-    "~/Library/Application Support/BraveSoftware/Brave-Browser/PurpleTeam/Login Data",
-    "~/Library/Application Support/Microsoft Edge/PurpleTeam/Network/Cookies",
-    "~/Library/Application Support/Firefox/Profiles/purple-team/logins.json",
-    "~/Library/Application Support/Firefox/Profiles/purple-team/key4.db",
-    "~/Library/Application Support/Firefox/Profiles/purple-team/cookies.sqlite",
-    "~/Library/Application Support/Trae/User/globalStorage/purple-team/session-secret",
-    "~/.config/openclaw/purple-team/session-secret",
-    "~/.openclaw/purple-team/session-secret",
-    "<workspace>/agent-fixture/mcp.json",
-    "<workspace>/agent-fixture/.mcp.json"
+  "browser": [
+    "<chrome-profile>/Login Data",
+    "<chrome-profile>/Network/Cookies",
+    "<chrome-profile>/Cookies",
+    "<brave-profile>/Login Data",
+    "<brave-profile>/Network/Cookies",
+    "<brave-profile>/Cookies",
+    "<edge-profile>/Network/Cookies",
+    "<edge-profile>/Cookies",
+    "<firefox-profile>/logins.json",
+    "<firefox-profile>/key4.db",
+    "<firefox-profile>/cookies.sqlite",
+    "<trae-storage>/state.vscdb",
+    "<openclaw-config>/session-secret",
+    "<openclaw-home>/session-secret"
   ]
 }

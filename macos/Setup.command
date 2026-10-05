@@ -1,2 +1,2 @@
 #!/bin/zsh
-exec /bin/zsh "$(dirname -- "$0")/launch.sh" setup "$@"
+exec /bin/zsh "$(dirname -- "$0")/launch.sh" test "$@"

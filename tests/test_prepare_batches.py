@@ -27,7 +27,7 @@ class BatchTests(unittest.TestCase):
             self.assertEqual([e["path"] for e in manifest["files"]], [str(root / "new/mock")])
             self.assertEqual(existing.read_bytes(), b"leave this alone")
             self.assertEqual(existing.stat().st_mtime_ns, before)
-            runner = ROOT / "skills/trae-workspace-preflight/scripts/preflight.py"
+            runner = ROOT / "skills/agent-workspace-preflight/scripts/preflight.py"
             spec = importlib.util.spec_from_file_location("batch_preflight", runner)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
