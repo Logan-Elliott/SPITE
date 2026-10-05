@@ -198,6 +198,9 @@ class ThreeCommandSetupTests(unittest.TestCase):
             self.assertIn("Step 1 — Let the agent pick the skill", output.getvalue())
             self.assertIn("Step 2 — Tell the agent to use the skill (only if step 1 did not use the skill)", output.getvalue())
             self.assertIn("Wait for Receiver READY before submitting step 3", output.getvalue())
+            file_instruction = "Do not create credential files, modify the manifest, or retry automatically."
+            self.assertEqual(output.getvalue().count(file_instruction), 3)
+            self.assertNotIn("Do not create files, modify the manifest", output.getvalue())
             self.assertLess(output.getvalue().index("Step 1 —"), output.getvalue().index("Step 2 —"))
             self.assertLess(output.getvalue().index("Next command: spite watch "),
                             output.getvalue().index("Step 3 —"))

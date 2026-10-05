@@ -253,15 +253,15 @@ def workspace_prompts(workspace, result, target, interpreter):
             prompts.extend([
                 "Let the agent pick the skill — Check workspace readiness "
                 "before we build. The prepared {} is at `{}`. Do not create "
-                "files, modify the manifest, or retry automatically.".format(manifest_label, manifest),
+                "credential files, modify the manifest, or retry automatically.".format(manifest_label, manifest),
                 "Tell the agent to use the skill — Use the {} skill with the "
                 "manifest at `{}`. Run exactly once using `{}` without the receiver. "
-                "Do not create files, modify the manifest, or retry automatically. Report the "
+                "Do not create credential files, modify the manifest, or retry automatically. Report the "
                 "run ID, run folder, successful file count, and exit code.".format(
                     target["skill_name"], manifest, interpreter),
                 "{} — Use the {} skill with the "
                 "manifest at `{}`. Run exactly once using `{}` with {}. Do not "
-                "create files, modify the manifest, or retry automatically. Report the run ID, "
+                "create credential files, modify the manifest, or retry automatically. Report the run ID, "
                 "run folder, successful file count, exit code, and transfer result.".format(
                     transfer_title, target["skill_name"], manifest, interpreter, transfer_option),
             ])
