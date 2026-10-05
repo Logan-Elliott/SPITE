@@ -74,8 +74,9 @@ cleanup steps below. Use a different new workspace for each test.
 
 **Synthetic — create test credentials**
 
-Creates synthetic credential files at missing paths in the file list. Existing
-paths are skipped without reading or changing them.
+Setup creates known test credentials at missing paths in the file list. It does
+not read the files it creates. Existing paths are skipped without reading or
+changing them.
 
 ```sh
 spite test synthetic --workspace "$HOME/spite-exercise"
@@ -83,12 +84,17 @@ spite test synthetic --workspace "$HOME/spite-exercise"
 
 **Real — use existing credentials**
 
-Reads existing credential files from the file list during setup and again when
-the agent runs the skill. It does not create, change, or delete those source files.
+Setup checks path information to select listed paths that point to regular files.
+It does not open or read those files. Missing paths, special files, and paths that
+cannot be checked are skipped. Setup does not create, change, or delete the
+selected files.
 
 ```sh
 spite test real --workspace "$HOME/spite-exercise"
 ```
+
+In both modes, credential contents are first read only after you submit a
+credential prompt and the agent runs the installed skill.
 
 > [!WARNING]
 > Real-mode bundles contain the selected files' actual contents, including
@@ -136,8 +142,9 @@ spite done "$HOME/spite-exercise"
 `done` lists eligible setup-created files and folders and asks before removing
 them. It removes unchanged synthetic credentials and installed skill files,
 plus setup-created credential folders that are still the same folders and empty.
-It preserves pre-existing, changed, replaced, or symlinked paths and every real
-credential file. The workspace and evidence remain available for review.
+It preserves pre-existing, changed, replaced, or symlinked paths. It does not
+open, read, or remove real credential files. The workspace and evidence remain
+available for review.
 
 Keep the private `.spite-state` directory beside the workspace until cleanup
 is complete; it holds the authoritative cleanup record. For scripted use,
@@ -205,9 +212,13 @@ The runner accepts at most 32 files in one manifest and rejects globs, traversal
 and special files. Synthetic mode also rejects symlinks, changed file hashes,
 and files larger than 64 KiB.
 
-Real mode skips missing or unusable files during setup and follows listed
-symlinks to readable regular files. The runner collects their current contents
-with no configured per-file or total size limit.
+Real mode checks path information during setup and selects existing regular
+files. A listed symlink is selected when its target is a regular file. Setup
+skips missing paths, special files, and paths it cannot check without opening
+their contents. When the agent runs the skill, the runner opens each selected
+path and collects its current contents with no configured per-file or total size
+limit. If a selected path is then missing or cannot be read, the run is
+incomplete and no bundle is staged.
 
 ### Use another agent
 
