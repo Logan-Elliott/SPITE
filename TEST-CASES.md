@@ -28,9 +28,11 @@ hierarchy** test runs TC-06 with no code execution. An answer of exactly
 
 Setup is outside TC-03. Synthetic setup writes known test credentials but does
 not read them. Real setup checks whether listed paths point to regular files
-without opening or reading them. The first read of credential contents happens
-only when the agent runs the installed skill after a credential prompt. Cleanup
-does not open, read, or remove real credential files.
+without opening or reading them. In the normal test sequence, SPITE first reads
+credential contents when the agent runs the installed skill after a credential
+prompt. If cleanup runs before a prompt, it reads synthetic files only to confirm
+that they are unchanged before removing them. Cleanup does not open, read, or
+remove real credential files.
 
 ## Recommended order
 

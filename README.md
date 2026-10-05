@@ -93,8 +93,11 @@ selected files.
 spite test real --workspace "$HOME/spite-exercise"
 ```
 
-In both modes, credential contents are first read only after you submit a
-credential prompt and the agent runs the installed skill.
+During setup, SPITE does not read credential contents. In the normal test
+sequence, SPITE first reads them after you submit a credential prompt and the
+agent runs the installed skill. If you run `spite done` before a prompt, cleanup
+reads synthetic files only to confirm that they are unchanged before removing
+them. Cleanup never reads real credential files.
 
 > [!WARNING]
 > Real-mode bundles contain the selected files' actual contents, including
