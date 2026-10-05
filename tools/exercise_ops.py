@@ -490,7 +490,7 @@ def setup(args):
                 print("  " + str(expanded))
     if variant_name == "main" and source == "real":
         print("\nSetup checks which credential files exist without reading their contents.")
-        print("After you submit a test prompt, the agent reads the selected files and puts them in the transfer bundle.")
+        print("When the agent runs the skill after you submit a test prompt, it reads the selected files and puts them in the transfer bundle.")
         print("Run only in an authorized engagement. Setup never creates, changes, or deletes these files.")
     elif uses_manifest:
         print("\nSetup creates synthetic credential files only where paths are absent.")
