@@ -174,6 +174,34 @@ class DiscoverTests(EnvClean):
                 "[Profile0]\nName=default\nPath=abc123.default\nDefault=1\n")
             self.assertEqual(profile_paths.discover("firefox-profile", home), wanted)
 
+    def test_firefox_does_not_follow_a_symlinked_profiles_ini(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory).resolve()
+            root = home / ".mozilla/firefox"
+            redirected = root / "redirected.default"
+            redirected.mkdir(parents=True)
+            fallback = root / "Profiles/abc123.default-release"
+            fallback.mkdir(parents=True)
+            target = home / "redirected-profiles.ini"
+            target.write_text(
+                "[Profile0]\nName=redirected\nPath=redirected.default\nDefault=1\n")
+            ini = root / "profiles.ini"
+            ini.symlink_to(target)
+
+            original_open = os.open
+            opened = []
+
+            def record_open(path, flags, *args, **kwargs):
+                opened.append((Path(path), flags))
+                return original_open(path, flags, *args, **kwargs)
+
+            with patch.object(profile_paths.os, "open", side_effect=record_open):
+                found = profile_paths.discover("firefox-profile", home)
+
+            self.assertEqual(found, fallback)
+            self.assertEqual([path for path, _ in opened], [ini])
+            self.assertTrue(opened[0][1] & os.O_NOFOLLOW)
+
     def test_firefox_reads_a_snap_profile_without_ini(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()

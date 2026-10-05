@@ -12,6 +12,7 @@ roots for Chrome, Chromium, Brave, Edge, and Firefox.
 """
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 
@@ -102,9 +103,22 @@ def _chromium_profile(root):
 
 
 def _read_ini(path):
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise OSError("Cannot safely read profiles.ini on this platform")
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return {}
+        with os.fdopen(descriptor, encoding="utf-8", errors="replace") as handle:
+            descriptor = None
+            lines = handle.read().splitlines()
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
     sections = {}
     current = None
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for line in lines:
         line = line.strip()
         if line.startswith("[") and line.endswith("]"):
             current = line[1:-1]
@@ -119,8 +133,11 @@ def _firefox_profile(root):
     if not root.is_dir() or root.is_symlink():
         return None
     ini = root / "profiles.ini"
-    if ini.is_file():
+    try:
         sections = _read_ini(ini)
+    except OSError:
+        sections = {}
+    if sections:
         profiles = [v for k, v in sections.items() if k.lower().startswith("profile") and v.get("Path")]
         ordered = [v for v in profiles if v.get("Default") == "1"]
         ordered += [v for v in profiles if v not in ordered]
