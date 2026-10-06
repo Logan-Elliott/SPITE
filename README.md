@@ -318,17 +318,17 @@ command. `spite uninstall` removes the command link and keeps the saved package.
 
 Release archives include a checksum and a GitHub artifact attestation. Download
 the ZIP and its `.sha256` file together, then check them before extracting.
-Replace `0.2.0` with the downloaded version:
+Replace `0.3.0` with the downloaded version:
 
 ```sh
 # macOS
-shasum -a 256 -c spite-0.2.0.zip.sha256
+shasum -a 256 -c spite-0.3.0.zip.sha256
 
 # Linux
-sha256sum -c spite-0.2.0.zip.sha256
+sha256sum -c spite-0.3.0.zip.sha256
 
 # With GitHub CLI installed
-gh attestation verify spite-0.2.0.zip --repo Logan-Elliott/SPITE
+gh attestation verify spite-0.3.0.zip --repo Logan-Elliott/SPITE
 ```
 
 From a source checkout, run the same checks used by CI:
