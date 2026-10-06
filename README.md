@@ -1,5 +1,7 @@
 # SPITE: Skill Poisoning and Instruction Trust Evaluation
 
+![SPITE: a poisoned SKILL.md instruction crossing into a coding agent.](assets/readme-banner.png)
+
 Test whether a coding agent discovers, trusts, and runs a malicious project
 skill. SPITE is a purple team tool for macOS and Linux: it prepares the workspace
 and prompts, then verifies the files and transfers produced during the exercise.

@@ -40,7 +40,7 @@ if __name__=="__main__":
         files.extend(p for p in (ROOT/folder).rglob("*") if (p.is_file() or p.is_symlink()) and "__pycache__" not in p.parts and p.suffix!=".pyc")
     files.extend(ROOT/name for name in (
         "README.md","TEST-CASES.md","DETECTIONS.md",
-        "CONTRIBUTING.md","LICENSE","VERSION","spite"))
+        "CONTRIBUTING.md","LICENSE","VERSION","spite","assets/readme-banner.png"))
     validate_package_inputs(ROOT,files)
     hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
     with zipfile.ZipFile(target,"w",compression=zipfile.ZIP_DEFLATED) as archive:
