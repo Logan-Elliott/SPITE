@@ -316,8 +316,8 @@ keep your receiver's records for the detection review.
 Run `./spite update` from a newer extracted package to update the installed
 command. `spite uninstall` removes the command link and keeps the saved package.
 
-Release archives include a checksum and a GitHub artifact attestation. Download
-the ZIP and its `.sha256` file together, then check them before extracting.
+Release archives include a checksum. Download the ZIP and its `.sha256` file
+together, then check them before extracting.
 Replace `0.3.0` with the downloaded version:
 
 ```sh
@@ -326,8 +326,12 @@ shasum -a 256 -c spite-0.3.0.zip.sha256
 
 # Linux
 sha256sum -c spite-0.3.0.zip.sha256
+```
 
-# With GitHub CLI installed
+Releases built while the repository is public also include a GitHub artifact
+attestation. For those releases, verify it with GitHub CLI:
+
+```sh
 gh attestation verify spite-0.3.0.zip --repo Logan-Elliott/SPITE
 ```
 

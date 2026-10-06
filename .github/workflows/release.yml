@@ -23,6 +23,7 @@ jobs:
           test "v$(cat VERSION)" = "$GITHUB_REF_NAME"
           python3 tools/release_check.py
       - name: Attest operator archive
+        if: github.event.repository.private == false
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: dist/spite-*.zip
