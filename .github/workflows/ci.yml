@@ -7,8 +7,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   release-check:
+    name: release-check (${{ matrix.os }}, ${{ matrix.python }})
+    timeout-minutes: 15
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -21,6 +31,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
@@ -32,7 +44,9 @@ jobs:
       - run: python3 tools/release_check.py
 
   macos-archive-smoke:
+    name: macos-archive-smoke
     runs-on: macos-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -102,5 +116,5 @@ jobs:
           cat "$watch_log"
           [[ "$watch_status" -eq 0 ]]
           grep -Fq 'SPITE verification (both runs): VERIFIED' "$watch_log"
-          "$cli" done "$workspace" --yes
+          "$cli" 'done' "$workspace" --yes
           test ! -e "$workspace/fake.env"
