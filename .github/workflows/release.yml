@@ -4,34 +4,112 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
-  artifact-metadata: write
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  release:
+  build:
+    name: Test and build
     runs-on: macos-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check release tag
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_TYPE" == "tag" ]]
+          [[ "$GITHUB_REF_PROTECTED" == "true" ]]
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
+          test "v$(cat VERSION)" = "$GITHUB_REF_NAME"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.x"
-      - name: Check tag and build
+      - name: Test and build
+        run: python3 tools/release_check.py
+      - name: Upload release files
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-package
+          path: |
+            dist/spite-*.zip
+            dist/spite-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish:
+    name: Verify and publish
+    needs: build
+    if: github.repository == 'Logan-Elliott/SPITE'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write # Create the release and upload its files.
+      id-token: write # Request the identity used to sign the archive attestation.
+      attestations: write # Store the archive's provenance attestation.
+    steps:
+      # This job never checks out or executes repository or archive contents.
+      - name: Download this run's release files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: ${{ runner.temp }}/spite-release
+          merge-multiple: true
+      - name: Verify release files
+        id: verify
+        env:
+          RELEASE_DIR: ${{ runner.temp }}/spite-release
         run: |
-          test "v$(cat VERSION)" = "$GITHUB_REF_NAME"
-          python3 tools/release_check.py
+          python3 - <<'PY'
+          import hashlib
+          import os
+          from pathlib import Path
+          import re
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag):
+              raise SystemExit("Release tag must use vX.Y.Z")
+          folder = Path(os.environ["RELEASE_DIR"])
+          archive = folder / ("spite-" + tag[1:] + ".zip")
+          checksum = archive.with_name(archive.name + ".sha256")
+          if set(folder.iterdir()) != {archive, checksum}:
+              raise SystemExit("Expected only the release ZIP and its checksum")
+          for path in (archive, checksum):
+              if path.is_symlink() or not path.is_file():
+                  raise SystemExit("Release files must be regular files")
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          expected = digest + "  " + archive.name + "\n"
+          if checksum.read_text(encoding="utf-8") != expected:
+              raise SystemExit("Release checksum does not match")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("archive=" + str(archive) + "\n")
+          PY
       - name: Attest operator archive
         if: github.event.repository.private == false
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          subject-path: dist/spite-*.zip
+          subject-path: ${{ steps.verify.outputs.archive }}
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$GITHUB_REF_NAME"
-          dist/spite-*.zip
-          dist/spite-*.zip.sha256
-          --verify-tag --generate-notes
+          ARCHIVE: ${{ steps.verify.outputs.archive }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ARCHIVE" "$ARCHIVE.sha256" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
