@@ -3,3 +3,17 @@ __pycache__/
 dist/
 AGENTS.md
 /RESEARCH.md
+
+# SPITE cleanup records
+.spite-state/
+ownership.json
+ownership.json.new-*
+
+# SPITE run folders and credential bundles
+**/runs/spite-*/
+diagnostics.b64
+
+# SPITE receiver logs, captures, and verification reports
+**/evidence/credentials*.jsonl
+**/evidence/credentials*.pcap*
+**/evidence/credentials-*.json
